@@ -8,7 +8,7 @@ node_modules/
 .env.*.local
 
 # Build output
-dist/
+# dist/  (保留前端构建产物，用于 Glitch 等平台直接部署)
 build/
 *.log
 

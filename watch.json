@@ -1,0 +1,10 @@
+{
+  "install": {
+    "include": [
+      "^package\\.json$",
+      "^backend/package\\.json$"
+    ]
+  },
+  "start": "npm start",
+  "throttle": 10000
+}

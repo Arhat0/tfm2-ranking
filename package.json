@@ -1,0 +1,14 @@
+{
+  "name": "tfm2-ranking",
+  "version": "1.0.0",
+  "description": "Teamfight Manager 2 1v1 ranking system",
+  "main": "backend/src/index.js",
+  "scripts": {
+    "postinstall": "cd backend && npm install",
+    "start": "cd backend && npm run init-db && node src/index.js"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "license": "MIT"
+}
