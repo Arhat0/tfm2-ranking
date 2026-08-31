@@ -17,9 +17,15 @@
         <h2 class="text-2xl font-bold text-white mb-2">正在匹配对手...</h2>
         <p class="text-dark-400 mb-6">已等待 {{ formattedWaitTime }}</p>
 
-        <div class="bg-dark-800 rounded-xl p-4 mb-6 border border-dark-700">
-          <div class="text-sm text-dark-400">你的排位分</div>
-          <div class="text-3xl font-bold text-primary-400">{{ profile?.rankScore || 1200 }}</div>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="bg-dark-800 rounded-xl p-4 border border-dark-700">
+            <div class="text-sm text-dark-400">你的排位分</div>
+            <div class="text-2xl font-bold text-primary-400">{{ profile?.rankScore || 1200 }}</div>
+          </div>
+          <div class="bg-dark-800 rounded-xl p-4 border border-dark-700">
+            <div class="text-sm text-dark-400">匹配中人数</div>
+            <div class="text-2xl font-bold text-green-400">{{ queueSize }}</div>
+          </div>
         </div>
 
         <button
@@ -79,7 +85,12 @@
         </div>
 
         <h2 class="text-2xl font-bold text-white mb-2">准备开始排位赛</h2>
-        <p class="text-dark-400 mb-8">点击下方按钮加入匹配队列</p>
+        <p class="text-dark-400 mb-4">点击下方按钮加入匹配队列</p>
+
+        <div class="inline-flex items-center gap-2 bg-dark-800 rounded-full px-4 py-2 mb-8 border border-dark-700">
+          <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+          <span class="text-sm text-dark-300">当前匹配中：<span class="text-green-400 font-bold">{{ queueSize }}</span> 人</span>
+        </div>
 
         <button
           @click="handleStart"
@@ -106,6 +117,7 @@ import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
+import { matchmakingApi } from '../api'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -119,8 +131,19 @@ const currentMatch = computed(() => matchStore.currentMatch)
 
 const starting = ref(false)
 const waitSeconds = ref(0)
+const queueSize = ref(0)
 let waitTimer = null
+let queueTimer = null
 let socketListeners = []
+
+async function fetchQueueSize() {
+  try {
+    const res = await matchmakingApi.queueSize()
+    queueSize.value = res.data.queueSize
+  } catch (err) {
+    // 静默失败，不影响用户体验
+  }
+}
 
 const formattedWaitTime = computed(() => {
   const m = Math.floor(waitSeconds.value / 60)
@@ -221,10 +244,13 @@ function cleanupSocketListeners() {
 onMounted(async () => {
   await matchStore.fetchCurrentMatch()
   setupSocketListeners()
+  fetchQueueSize()
+  queueTimer = setInterval(fetchQueueSize, 5000)
 })
 
 onUnmounted(() => {
   if (waitTimer) clearInterval(waitTimer)
+  if (queueTimer) clearInterval(queueTimer)
   cleanupSocketListeners()
 })
 

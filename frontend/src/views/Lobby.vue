@@ -4,8 +4,19 @@
     <div class="bg-gradient-to-r from-primary-900 to-dark-800 rounded-xl p-6 border border-primary-800">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold text-white">欢迎回来，{{ profile?.username }}</h1>
-          <p class="text-dark-300 mt-1">准备好进行 1v1 排位赛了吗？</p>
+          <div class="flex items-center gap-2">
+            <h1 class="text-2xl font-bold text-white">{{ profile?.gameId }}</h1>
+            <button
+              @click="showEditModal = true"
+              class="text-dark-400 hover:text-white transition-colors"
+              title="编辑资料"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+              </svg>
+            </button>
+          </div>
+          <p class="text-dark-300 mt-1">{{ profile?.username }} · 准备好进行 1v1 排位赛了吗？</p>
         </div>
         <button
           @click="goToMatchmaking"
@@ -107,24 +118,118 @@
         </div>
       </div>
     </div>
+
+    <!-- 编辑资料模态框 -->
+    <div v-if="showEditModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" @click.self="showEditModal = false">
+      <div class="bg-dark-800 rounded-xl p-6 w-full max-w-md border border-dark-700">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-white">编辑资料</h3>
+          <button @click="showEditModal = false" class="text-dark-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-dark-300 mb-1">战队名（游戏ID）</label>
+            <input
+              v-model="editForm.gameId"
+              type="text"
+              maxlength="100"
+              class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="输入游戏内ID/战队名"
+            />
+            <p class="text-xs text-dark-500 mt-1">这是在排行榜和对局中显示的名称</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-dark-300 mb-1">用户名</label>
+            <input
+              v-model="editForm.username"
+              type="text"
+              maxlength="50"
+              class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="输入登录用户名"
+            />
+            <p class="text-xs text-dark-500 mt-1">用于登录，不会在游戏中显示</p>
+          </div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <button
+            @click="showEditModal = false"
+            class="flex-1 px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+          >
+            取消
+          </button>
+          <button
+            @click="handleSaveProfile"
+            :disabled="savingProfile"
+            class="flex-1 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-800 text-white font-medium rounded-lg transition-colors"
+          >
+            {{ savingProfile ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
+import { useToastStore } from '../stores/toast'
 import { matchApi } from '../api'
 import TierBadge from '../components/TierBadge.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const matchStore = useMatchStore()
+const toastStore = useToastStore()
 
 const profile = computed(() => authStore.profile)
 const currentMatch = computed(() => matchStore.currentMatch)
 const recentMatches = ref([])
+
+// 编辑资料
+const showEditModal = ref(false)
+const savingProfile = ref(false)
+const editForm = ref({
+  username: '',
+  gameId: '',
+})
+
+// 打开编辑模态框时填充当前值
+watch(showEditModal, (val) => {
+  if (val && profile.value) {
+    editForm.value.username = profile.value.username
+    editForm.value.gameId = profile.value.gameId
+  }
+})
+
+async function handleSaveProfile() {
+  if (!editForm.value.username || !editForm.value.gameId) {
+    toastStore.warning('用户名和战队名不能为空')
+    return
+  }
+  savingProfile.value = true
+  try {
+    await authStore.updateProfile({
+      username: editForm.value.username,
+      gameId: editForm.value.gameId,
+    })
+    toastStore.success('资料已更新')
+    showEditModal.value = false
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '更新失败')
+  } finally {
+    savingProfile.value = false
+  }
+}
 
 const statusMap = {
   pending: '等待开始',

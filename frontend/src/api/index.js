@@ -36,6 +36,7 @@ export const authApi = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/users/me'),
+  updateProfile: (data) => api.put('/users/me', data),
 }
 
 // 匹配 API
@@ -43,6 +44,7 @@ export const matchmakingApi = {
   start: (socketId) => api.post('/matchmaking/start', { socketId }),
   cancel: () => api.post('/matchmaking/cancel'),
   status: () => api.get('/matchmaking/status'),
+  queueSize: () => api.get('/matchmaking/queue-size'),
 }
 
 // 对局 API

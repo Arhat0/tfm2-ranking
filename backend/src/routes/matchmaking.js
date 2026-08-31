@@ -79,4 +79,18 @@ router.get('/status', authMiddleware, (req, res) => {
   }
 });
 
+// 公开：获取当前匹配队列人数（无需登录）
+router.get('/queue-size', (req, res) => {
+  try {
+    const matchmaking = getMatchmaking();
+    res.json({
+      queueSize: matchmaking.getQueueSize(),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Queue size error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
 module.exports = router;
