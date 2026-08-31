@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: tfm2-ranking
+    runtime: node
+    rootDir: .
+    plan: free
+    buildCommand: cd backend && npm install && cd ../frontend && npm install && npm run build && cd ../backend && npm run init-db
+    startCommand: cd backend && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGIN
+        value: '*'
