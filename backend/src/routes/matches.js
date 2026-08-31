@@ -133,6 +133,7 @@ router.get('/history', authMiddleware, async (req, res) => {
       return {
         id: m.id,
         opponent: isPlayer1 ? m.player2_username : m.player1_username,
+        opponentGameId: isPlayer1 ? m.player2_game_id : m.player1_game_id,
         won,
         score: parsedResult?.score || null,
         scoreChange: m.score_change,

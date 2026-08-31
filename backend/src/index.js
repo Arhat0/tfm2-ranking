@@ -17,6 +17,7 @@ const userRoutes = require('./routes/users');
 const matchmakingRoutes = require('./routes/matchmaking');
 const matchRoutes = require('./routes/matches');
 const leaderboardRoutes = require('./routes/leaderboard');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const server = http.createServer(app);
@@ -34,6 +35,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/matchmaking', matchmakingRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

@@ -265,7 +265,9 @@ class MatchService {
     const result = await db.query(
       `SELECT m.*,
               u1.username as player1_username,
+              u1.game_id as player1_game_id,
               u2.username as player2_username,
+              u2.game_id as player2_game_id,
               rh.change as score_change
        FROM matches m
        JOIN users u1 ON m.player1_id = u1.id

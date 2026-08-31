@@ -61,4 +61,14 @@ export const leaderboardApi = {
   get: (page = 1, limit = 50) => api.get('/leaderboard', { params: { page, limit } }),
 }
 
+// 管理员 API
+export const adminApi = {
+  getUsers: () => api.get('/admin/users'),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getDisputes: (status = 'open') => api.get('/admin/disputes', { params: { status } }),
+  confirmDispute: (id, adminNote) => api.post(`/admin/disputes/${id}/confirm`, { adminNote }),
+  cancelDispute: (id, adminNote) => api.post(`/admin/disputes/${id}/cancel`, { adminNote }),
+  overrideDispute: (id, winnerId, adminNote) => api.post(`/admin/disputes/${id}/override`, { winnerId, adminNote }),
+}
+
 export default api

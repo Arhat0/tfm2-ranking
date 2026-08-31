@@ -21,7 +21,8 @@
         >
           {{ idx + 1 }}
         </div>
-        <div class="font-semibold text-white text-sm truncate">{{ player.username }}</div>
+        <div class="font-semibold text-white text-sm truncate">{{ player.gameId }}</div>
+        <div class="text-xs text-dark-500 truncate">{{ player.username }}</div>
         <TierBadge :tier="player.tier" :score="player.rankScore" class="mt-1" />
         <div class="text-xs text-dark-500 mt-1">{{ player.wins }}胜 {{ player.losses }}负</div>
       </div>
@@ -67,11 +68,11 @@
               </span>
             </div>
             <div class="col-span-4">
-              <div class="font-medium text-white truncate">
-                {{ player.username }}
+              <div class="font-semibold text-white truncate">
+                {{ player.gameId }}
                 <span v-if="player.userId === profile?.id" class="text-primary-400 text-xs ml-1">（我）</span>
               </div>
-              <div class="text-xs text-dark-500 truncate">{{ player.gameId }}</div>
+              <div class="text-xs text-dark-500 truncate">{{ player.username }}</div>
             </div>
             <div class="col-span-3">
               <TierBadge :tier="player.tier" :score="player.rankScore" />

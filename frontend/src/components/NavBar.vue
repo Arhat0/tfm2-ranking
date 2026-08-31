@@ -11,7 +11,7 @@
 
         <div class="flex items-center gap-1">
           <router-link
-            v-for="link in navLinks"
+            v-for="link in visibleNavLinks"
             :key="link.path"
             :to="link.path"
             class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -23,7 +23,7 @@
 
         <div class="flex items-center gap-3">
           <div v-if="authStore.profile" class="text-right hidden sm:block">
-            <div class="text-sm font-medium text-white">{{ authStore.profile.username }}</div>
+            <div class="text-sm font-medium text-white">{{ authStore.profile.gameId }}</div>
             <div class="text-xs text-dark-400">
               <TierBadge :tier="authStore.profile.tier" :score="authStore.profile.rankScore" />
             </div>
@@ -54,7 +54,12 @@ const navLinks = [
   { path: '/', name: '大厅' },
   { path: '/leaderboard', name: '排行榜' },
   { path: '/history', name: '战绩' },
+  { path: '/admin', name: '管理', adminOnly: true },
 ]
+
+const visibleNavLinks = computed(() => {
+  return navLinks.filter((link) => !link.adminOnly || authStore.profile?.isAdmin)
+})
 
 function isActive(path) {
   return route.path === path

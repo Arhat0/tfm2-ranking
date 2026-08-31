@@ -49,8 +49,8 @@
               {{ match.won ? 'W' : 'L' }}
             </div>
             <div>
-              <div class="font-medium text-white">{{ match.opponent }}</div>
-              <div class="text-sm text-dark-500">{{ formatDate(match.finishedAt) }}</div>
+              <div class="font-medium text-white">{{ match.opponentGameId || match.opponent }}</div>
+              <div class="text-sm text-dark-500">{{ match.opponent }} · {{ formatDate(match.finishedAt) }}</div>
             </div>
           </div>
 

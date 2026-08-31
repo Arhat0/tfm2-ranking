@@ -35,10 +35,10 @@
         <div class="flex items-center justify-between">
           <div class="text-center flex-1">
             <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span class="text-2xl font-bold text-white">{{ match.opponent?.username?.charAt(0) || '?' }}</span>
+              <span class="text-2xl font-bold text-white">{{ match.opponent?.gameId?.charAt(0) || '?' }}</span>
             </div>
-            <div class="font-semibold text-white">{{ match.opponent?.username }}</div>
-            <div class="text-sm text-dark-400">游戏ID: {{ match.opponent?.gameId }}</div>
+            <div class="font-semibold text-white text-lg">{{ match.opponent?.gameId }}</div>
+            <div class="text-sm text-dark-400">{{ match.opponent?.username }}</div>
           </div>
 
           <div class="px-4">
@@ -47,10 +47,10 @@
 
           <div class="text-center flex-1">
             <div class="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span class="text-2xl font-bold text-white">{{ profile?.username?.charAt(0) || '?' }}</span>
+              <span class="text-2xl font-bold text-white">{{ profile?.gameId?.charAt(0) || '?' }}</span>
             </div>
-            <div class="font-semibold text-white">{{ profile?.username }}（你）</div>
-            <div class="text-sm text-dark-400">游戏ID: {{ profile?.gameId }}</div>
+            <div class="font-semibold text-white text-lg">{{ profile?.gameId }}（你）</div>
+            <div class="text-sm text-dark-400">{{ profile?.username }}</div>
           </div>
         </div>
 

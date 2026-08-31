@@ -80,7 +80,7 @@
               class="w-2 h-2 rounded-full"
               :class="match.won ? 'bg-green-500' : 'bg-red-500'"
             ></div>
-            <span class="text-white font-medium">{{ match.opponent }}</span>
+            <span class="text-white font-medium">{{ match.opponentGameId || match.opponent }}</span>
             <span v-if="match.score" class="text-dark-400 text-sm">{{ match.score }}</span>
           </div>
           <div class="text-right">

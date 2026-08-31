@@ -43,8 +43,8 @@
 
         <div class="bg-dark-900 rounded-lg p-4 mb-6">
           <div class="text-sm text-dark-400 mb-1">对手</div>
-          <div class="text-xl font-bold text-white">{{ matchedData.opponent?.username }}</div>
-          <div class="text-sm text-primary-400 mt-1">游戏ID: {{ matchedData.opponent?.gameId }}</div>
+          <div class="text-xl font-bold text-white">{{ matchedData.opponent?.gameId }}</div>
+          <div class="text-sm text-dark-500 mt-1">{{ matchedData.opponent?.username }}</div>
         </div>
 
         <div class="bg-primary-900/30 border border-primary-700 rounded-lg p-4 mb-6">
