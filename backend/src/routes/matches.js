@@ -186,4 +186,54 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// 公开：所有人最近对局记录（无需登录）
+router.get('/public/recent', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+
+    const result = await db.query(
+      `SELECT m.id, m.status, m.result, m.winner_id, m.finished_at,
+              u1.username as player1_username, u1.game_id as player1_game_id,
+              u2.username as player2_username, u2.game_id as player2_game_id,
+              rh1.change as player1_score_change,
+              rh2.change as player2_score_change
+       FROM matches m
+       JOIN users u1 ON m.player1_id = u1.id
+       JOIN users u2 ON m.player2_id = u2.id
+       LEFT JOIN rank_history rh1 ON rh1.match_id = m.id AND rh1.user_id = m.player1_id
+       LEFT JOIN rank_history rh2 ON rh2.match_id = m.id AND rh2.user_id = m.player2_id
+       WHERE m.status = 'completed'
+       ORDER BY m.finished_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    const matches = result.rows.map((m) => {
+      const parsedResult = typeof m.result === 'string' ? JSON.parse(m.result) : m.result;
+      return {
+        id: m.id,
+        player1: {
+          username: m.player1_username,
+          gameId: m.player1_game_id,
+          scoreChange: m.player1_score_change,
+          isWinner: m.winner_id && m.player1_id === m.winner_id,
+        },
+        player2: {
+          username: m.player2_username,
+          gameId: m.player2_game_id,
+          scoreChange: m.player2_score_change,
+          isWinner: m.winner_id && m.player2_id === m.winner_id,
+        },
+        score: parsedResult?.score || null,
+        finishedAt: m.finished_at,
+      };
+    });
+
+    res.json({ matches, total: matches.length });
+  } catch (err) {
+    console.error('Get recent matches error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
 module.exports = router;

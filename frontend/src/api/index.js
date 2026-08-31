@@ -56,6 +56,7 @@ export const matchApi = {
   cancel: (id) => api.post(`/matches/${id}/cancel`),
   history: (page = 1, limit = 20) => api.get('/matches/history', { params: { page, limit } }),
   getById: (id) => api.get(`/matches/${id}`),
+  recent: (limit = 20) => api.get('/matches/public/recent', { params: { limit } }),
 }
 
 // 排行榜 API

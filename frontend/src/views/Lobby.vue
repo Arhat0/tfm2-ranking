@@ -107,6 +107,81 @@
       </div>
     </div>
 
+    <!-- 所有人最近对局 -->
+    <div class="bg-dark-800 rounded-xl p-6 border border-dark-700">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white">所有人最近对局</h2>
+        <button
+          @click="loadAllRecentMatches"
+          class="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
+        >
+          <svg class="w-4 h-4" :class="{ 'animate-spin': loadingRecent }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          刷新
+        </button>
+      </div>
+
+      <div v-if="loadingRecent" class="text-center py-8 text-dark-400">
+        <svg class="w-6 h-6 animate-spin mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        加载中...
+      </div>
+
+      <div v-else-if="recentAllMatches.length === 0" class="text-center py-8 text-dark-500">
+        暂无对局记录
+      </div>
+
+      <div v-else class="space-y-2 max-h-96 overflow-y-auto">
+        <div
+          v-for="match in recentAllMatches"
+          :key="match.id"
+          class="flex items-center justify-between p-3 bg-dark-900 rounded-lg"
+        >
+          <div class="flex items-center gap-3 flex-1 min-w-0">
+            <!-- 玩家1 -->
+            <div class="text-right flex-1 min-w-0">
+              <div
+                class="font-medium truncate"
+                :class="match.player1.isWinner ? 'text-green-400' : 'text-white'"
+              >
+                {{ match.player1.gameId }}
+                <span v-if="match.player1.isWinner" class="text-xs ml-1">胜</span>
+              </div>
+              <div class="text-xs" :class="match.player1.scoreChange >= 0 ? 'text-green-500' : 'text-red-500'">
+                {{ match.player1.scoreChange >= 0 ? '+' : '' }}{{ match.player1.scoreChange }}
+              </div>
+            </div>
+
+            <!-- 比分 -->
+            <div class="px-3 text-center">
+              <div class="text-lg font-bold text-dark-300">{{ match.score || 'VS' }}</div>
+            </div>
+
+            <!-- 玩家2 -->
+            <div class="flex-1 min-w-0">
+              <div
+                class="font-medium truncate"
+                :class="match.player2.isWinner ? 'text-green-400' : 'text-white'"
+              >
+                <span v-if="match.player2.isWinner" class="text-xs mr-1">胜</span>
+                {{ match.player2.gameId }}
+              </div>
+              <div class="text-xs" :class="match.player2.scoreChange >= 0 ? 'text-green-500' : 'text-red-500'">
+                {{ match.player2.scoreChange >= 0 ? '+' : '' }}{{ match.player2.scoreChange }}
+              </div>
+            </div>
+          </div>
+
+          <div class="text-xs text-dark-500 ml-3 whitespace-nowrap">
+            {{ formatDate(match.finishedAt) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 段位说明 -->
     <div class="bg-dark-800 rounded-xl p-6 border border-dark-700">
       <h2 class="text-lg font-semibold text-white mb-4">段位体系</h2>
@@ -194,6 +269,8 @@ const toastStore = useToastStore()
 const profile = computed(() => authStore.profile)
 const currentMatch = computed(() => matchStore.currentMatch)
 const recentMatches = ref([])
+const recentAllMatches = ref([])
+const loadingRecent = ref(false)
 
 // 编辑资料
 const showEditModal = ref(false)
@@ -270,12 +347,25 @@ async function loadRecentMatches() {
   }
 }
 
+async function loadAllRecentMatches() {
+  loadingRecent.value = true
+  try {
+    const res = await matchApi.recent(20)
+    recentAllMatches.value = res.data.matches
+  } catch (err) {
+    console.error('Load all recent matches error:', err)
+  } finally {
+    loadingRecent.value = false
+  }
+}
+
 let refreshInterval = null
 
 onMounted(async () => {
   await authStore.fetchProfile()
   await matchStore.fetchCurrentMatch()
   await loadRecentMatches()
+  await loadAllRecentMatches()
 
   // 定时刷新当前对局状态
   refreshInterval = setInterval(async () => {
