@@ -1,0 +1,13 @@
+node_modules
+*/node_modules
+.git
+.gitignore
+*.md
+!README.md
+backend/data
+*.db
+.env
+.env.*
+frontend/dist
+.vscode
+.idea

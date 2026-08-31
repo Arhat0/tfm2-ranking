@@ -23,7 +23,7 @@ const server = http.createServer(app);
 
 // 中间件
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true,
   credentials: true,
 }));
 app.use(express.json());
@@ -54,7 +54,7 @@ if (process.env.NODE_ENV === 'production') {
 // Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true,
     methods: ['GET', 'POST'],
     credentials: true,
   },
