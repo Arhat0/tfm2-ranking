@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { calculateElo, getTier } = require('../utils/elo');
+const { HeroStatsService } = require('./heroStatsService');
 
 /**
  * 对局服务 - 处理对局状态、结果上报、积分结算
@@ -77,7 +78,7 @@ class MatchService {
     return { success: true };
   }
 
-  async reportResult(matchId, reporterId, score, winnerId) {
+  async reportResult(matchId, reporterId, score, winnerId, heroData = null) {
     const match = await this.getMatchById(matchId, reporterId);
     if (!match) return { success: false, message: '对局不存在' };
     // 允许 in_progress 或 awaiting_confirmation（重新上报）状态
@@ -103,6 +104,17 @@ class MatchService {
        WHERE id = $4`,
       [JSON.stringify(result), reporterId, winnerId, matchId]
     );
+
+    // 保存英雄 BP 数据（选/禁 + 伤害）
+    if (heroData) {
+      try {
+        const opponentId = reporterId === match.player1_id ? match.player2_id : match.player1_id;
+        const statsService = new HeroStatsService();
+        await statsService.saveMatchHeroData(matchId, reporterId, opponentId, heroData);
+      } catch (err) {
+        console.error('Save hero data error:', err);
+      }
+    }
 
     // 通知对方确认
     const opponentId = reporterId === match.player1_id ? match.player2_id : match.player1_id;

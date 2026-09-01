@@ -59,14 +59,14 @@ router.post('/:id/start', authMiddleware, async (req, res) => {
 // 上报结果
 router.post('/:id/report', authMiddleware, async (req, res) => {
   try {
-    const { score, winnerId } = req.body;
+    const { score, winnerId, heroData } = req.body;
 
     if (!score || !winnerId) {
       return res.status(400).json({ error: '请提供比分和胜者' });
     }
 
     const matchService = getMatchService();
-    const result = await matchService.reportResult(req.params.id, req.user.id, score, winnerId);
+    const result = await matchService.reportResult(req.params.id, req.user.id, score, winnerId, heroData);
 
     if (!result.success) {
       return res.status(400).json({ error: result.message });

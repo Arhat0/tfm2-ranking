@@ -89,4 +89,32 @@ export const roomApi = {
   cancel: (id) => api.post(`/rooms/${id}/cancel`),
 }
 
+// 英雄 BP 统计 API
+export const heroStatsApi = {
+  list: () => api.get('/heroes'),
+  stats: () => api.get('/heroes/stats'),
+  myStats: () => api.get('/heroes/stats/me'),
+  playerStats: (userId) => api.get(`/heroes/stats/player/${userId}`),
+}
+
+// 游戏启动 API（一键对战）
+export const gameApi = {
+  launchConfig: () => api.get('/game/launch-config'),
+}
+
+// 锦标赛 API
+export const tournamentApi = {
+  list: () => api.get('/tournaments'),
+  get: (id) => api.get(`/tournaments/${id}`),
+  create: (data) => api.post('/tournaments', data),
+  register: (id) => api.post(`/tournaments/${id}/register`),
+  unregister: (id) => api.post(`/tournaments/${id}/unregister`),
+  start: (id) => api.post(`/tournaments/${id}/start`),
+  nextRound: (id) => api.post(`/tournaments/${id}/next-round`),
+  complete: (id) => api.post(`/tournaments/${id}/complete`),
+  reportMatch: (matchId, data) => api.post(`/tournaments/matches/${matchId}/report`, data),
+  getRound: (id, round) => api.get(`/tournaments/${id}/rounds/${round}`),
+  getStandings: (id) => api.get(`/tournaments/${id}/standings`),
+}
+
 export default api

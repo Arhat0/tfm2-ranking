@@ -45,6 +45,24 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/heroes',
+    name: 'HeroStats',
+    component: () => import('../views/HeroStats.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/tournaments',
+    name: 'Tournaments',
+    component: () => import('../views/Tournaments.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/tournaments/:id',
+    name: 'TournamentDetail',
+    component: () => import('../views/TournamentDetail.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/admin',
     name: 'Admin',
     component: () => import('../views/Admin.vue'),

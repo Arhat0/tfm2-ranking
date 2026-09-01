@@ -65,6 +65,30 @@
         </div>
 
         <div class="space-y-3">
+          <!-- 一键对战操作 -->
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              @click="openGame"
+              class="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              🎮 打开游戏
+            </button>
+            <button
+              @click="copyPassword"
+              class="px-4 py-3 bg-dark-700 hover:bg-dark-600 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              {{ copied ? '✓ 已复制' : '📋 复制密码' }}
+            </button>
+            <button
+              @click="downloadAutoFillScript"
+              class="px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              ⚡ 下载建房脚本
+            </button>
+          </div>
+          <p class="text-xs text-dark-500 text-center">
+            游戏内创建房间时输入上方密码即可（脚本可在建房界面自动输入）
+          </p>
           <button
             @click="handleStartGame"
             class="w-full px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors"
@@ -92,7 +116,7 @@
         <h2 class="text-2xl font-bold text-white mb-2">准备开始排位赛</h2>
         <p class="text-dark-400 mb-4">点击下方按钮加入匹配队列</p>
 
-        <div class="inline-flex items-center gap-2 bg-dark-800 rounded-full px-4 py-2 mb-8 border border-dark-700">
+        <div class="inline-flex items-center gap-2 bg-dark-800 rounded-full px-4 py-2 mb-6 border border-dark-700">
           <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
           <span class="text-sm text-dark-300">当前匹配中：<span class="text-green-400 font-bold">{{ queueSize }}</span> 人</span>
         </div>
@@ -104,6 +128,21 @@
         >
           {{ starting ? '加入中...' : '开始匹配' }}
         </button>
+
+        <!-- 一键对战选项 -->
+        <div class="mt-5 flex flex-col items-center gap-2">
+          <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+            <input
+              v-model="oneClickEnabled"
+              type="checkbox"
+              class="w-4 h-4 accent-primary-500"
+            />
+            <span class="text-sm text-dark-300">匹配成功后自动打开游戏（steam://）</span>
+          </label>
+          <p class="text-xs text-dark-500">
+            勾选后，匹配成功时将自动通过 Steam 启动 Teamfight Manager 2，并支持一键复制房间密码、下载自动建房辅助脚本
+          </p>
+        </div>
 
         <div v-if="currentMatch" class="mt-6">
           <router-link to="/match/current" class="text-primary-400 hover:text-primary-300 text-sm">
@@ -122,7 +161,7 @@ import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
-import { matchmakingApi } from '../api'
+import { matchmakingApi, gameApi } from '../api'
 import UserAvatar from '../components/UserAvatar.vue'
 
 const router = useRouter()
@@ -138,10 +177,83 @@ const currentMatch = computed(() => matchStore.currentMatch)
 const starting = ref(false)
 const waitSeconds = ref(0)
 const queueSize = ref(0)
+const oneClickEnabled = ref(false)
+const launchConfig = ref(null)
+const copied = ref(false)
 let waitTimer = null
 let queueTimer = null
 let matchCheckTimer = null
 let socketListeners = []
+
+function openGame() {
+  if (!launchConfig.value?.launchUrl) return
+  // 通过临时 <a> 触发自定义协议（steam://）
+  const a = document.createElement('a')
+  a.href = launchConfig.value.launchUrl
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  toastStore.info('已请求启动 Steam 并打开 Teamfight Manager 2')
+}
+
+async function copyPassword() {
+  const pw = matchedData.value?.roomPassword
+  if (!pw) return
+  try {
+    await navigator.clipboard.writeText(pw)
+    copied.value = true
+    toastStore.success('房间密码已复制')
+    setTimeout(() => (copied.value = false), 2000)
+  } catch (err) {
+    toastStore.error('复制失败，请手动复制')
+  }
+}
+
+function downloadAutoFillScript() {
+  const pw = matchedData.value?.roomPassword
+  if (!pw) return
+  const script = generateAutoFillScript(pw)
+  const blob = new Blob([script], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'tfm2_auto_join.ps1'
+  a.click()
+  URL.revokeObjectURL(url)
+  toastStore.info('辅助脚本已下载，游戏内进入建房界面后运行它即可自动输入密码')
+}
+
+function generateAutoFillScript(password) {
+  return `# TFM2 自动建房辅助脚本
+# 使用说明：
+# 1. 点击本网站"打开游戏"按钮启动 Teamfight Manager 2
+# 2. 在游戏内进入"创建房间"界面（停留在此界面）
+# 3. 双击运行本脚本，5 秒内切回游戏窗口，脚本会自动输入房间密码
+# 4. 输入完成后手动点击确认创建房间
+
+$password = '${password}'
+Write-Host 'TFM2 自动建房辅助脚本'
+Write-Host '房间密码: ' $password
+Write-Host '请在游戏内停留在创建房间界面，5 秒后自动输入密码...'
+Start-Sleep -Seconds 5
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName Microsoft.VisualBasic
+
+# 激活游戏窗口
+try {
+  [Microsoft.VisualBasic.Interaction]::AppActivate('Teamfight Manager 2')
+} catch {
+  Write-Host '未找到游戏窗口，请手动切换到游戏窗口'
+}
+
+Start-Sleep -Milliseconds 1000
+[System.Windows.Forms.SendKeys]::SendWait($password)
+Write-Host '密码已输入完毕，请手动确认创建房间'
+Start-Sleep -Seconds 2
+`
+}
 
 async function fetchQueueSize() {
   try {
@@ -245,6 +357,10 @@ function setupSocketListeners() {
     matchStore.setMatchedData(data)
     clearTimers()
     toastStore.success('匹配成功！')
+    // 一键对战：自动打开游戏
+    if (oneClickEnabled.value) {
+      openGame()
+    }
     matchStore.fetchCurrentMatch()
   }
 
@@ -284,6 +400,13 @@ onMounted(async () => {
   setupSocketListeners()
   fetchQueueSize()
   queueTimer = setInterval(fetchQueueSize, 5000)
+  // 获取游戏启动配置（steam:// 一键对战）
+  try {
+    const res = await gameApi.launchConfig()
+    launchConfig.value = res.data
+  } catch (err) {
+    // 静默失败，不影响匹配功能
+  }
 })
 
 onUnmounted(() => {

@@ -61,8 +61,8 @@ export const useMatchStore = defineStore('match', () => {
     await fetchCurrentMatch()
   }
 
-  async function reportResult(matchId, score, winnerId) {
-    await matchApi.report(matchId, { score, winnerId })
+  async function reportResult(matchId, score, winnerId, heroData) {
+    await matchApi.report(matchId, { score, winnerId, heroData })
     await fetchCurrentMatch()
   }
 

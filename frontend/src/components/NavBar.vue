@@ -57,6 +57,8 @@ const authStore = useAuthStore()
 const navLinks = [
   { path: '/', name: '大厅' },
   { path: '/leaderboard', name: '排行榜' },
+  { path: '/heroes', name: '英雄统计' },
+  { path: '/tournaments', name: '锦标赛' },
   { path: '/history', name: '战绩' },
   { path: '/admin', name: '管理', adminOnly: true },
 ]

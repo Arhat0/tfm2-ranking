@@ -124,6 +124,29 @@ NODE_ENV=production node src/index.js
 - 争议对局列表
 - 争议裁定（确认上报 / 取消对局 / 改判胜者）
 
+### 英雄 BP 统计
+
+- 上报表单中可填写双方的英雄选择（Pick，最多5名）与禁用（Ban，最多3个），以及每个英雄的造成/承受伤害
+- 全局统计：每位英雄的 Pick 次数、Ban 次数、Pick 胜率、场均造成/承受伤害、总伤害
+- 个人统计：我的英雄使用情况 + 总 Pick/Ban、胜率、伤害摘要
+- 数据来源为游戏内 68 个职业（英雄）的真实名单
+
+### 一键对战
+
+- 匹配成功后一键通过 `steam://rungameid/3009300` 自动启动 Steam 中的 Teamfight Manager 2
+- 一键复制房间密码到剪贴板
+- 下载本地自动建房辅助脚本（`tfm2_auto_join.ps1`）：游戏内进入建房界面后运行，自动聚焦游戏窗口并输入房间密码
+- 说明：受限于游戏本身没有对外 API，游戏内的"创建房间/匹配"仍需玩家在游戏内操作，网站提供一键启动 + 自动输入密码的辅助能力
+
+### 锦标赛（瑞士轮）
+
+- 管理员/创建者创建赛事，玩家自助报名
+- 开赛后按排位分确定种子，自动抽签生成第一轮配对
+- 瑞士轮配对算法：同分优先、避免重复交手、低种子轮空（自动获胜）
+- 每轮全部对局完成后自动生成下一轮，全部轮次结束自动留档
+- 实时积分榜：积分（胜场）、Buchholz 对手分辅助排名
+- 对局结果实时推送（Socket.io），页面 15 秒轮询兜底
+
 ## 项目结构
 
 ```
@@ -229,6 +252,30 @@ tfm2-ranking/
 - `POST /api/admin/disputes/:id/cancel` - 取消对局
 - `POST /api/admin/disputes/:id/override` - 改判胜者
 
+### 英雄 BP 统计
+
+- `GET /api/heroes` - 英雄列表（68个职业）
+- `GET /api/heroes/stats` - 全局英雄 BP 统计
+- `GET /api/heroes/stats/me` - 当前用户英雄 BP 统计（需登录）
+- `GET /api/heroes/stats/player/:userId` - 指定玩家英雄 BP 统计
+
+### 一键对战
+
+- `GET /api/game/launch-config` - 游戏启动配置（steam:// 协议链接）
+
+### 锦标赛（瑞士轮）
+
+- `GET /api/tournaments` - 赛事列表
+- `GET /api/tournaments/:id` - 赛事详情（含积分榜与全部对局）
+- `POST /api/tournaments` - 创建赛事
+- `POST /api/tournaments/:id/register` - 报名
+- `POST /api/tournaments/:id/unregister` - 退出报名
+- `POST /api/tournaments/:id/start` - 开赛并生成第一轮配对
+- `POST /api/tournaments/:id/next-round` - 手动开始下一轮
+- `POST /api/tournaments/:id/complete` - 结束赛事（留档）
+- `POST /api/tournaments/matches/:matchId/report` - 上报对局比分
+- `GET /api/tournaments/:id/standings` - 实时积分榜
+
 ## WebSocket 事件
 
 | 事件            | 方向 | 说明                             |
@@ -241,6 +288,13 @@ tfm2-ranking/
 | match:confirm   | C→S | 确认/争议                        |
 | match:result    | S→C | 结算通知（含积分变化）           |
 | match:cancelled | S→C | 对局取消                         |
+| tournament:join | C→S | 订阅赛事实时更新                 |
+| tournament:leave | C→S | 取消订阅赛事                     |
+| tournament:updated | S→C | 赛事状态变更                   |
+| tournament:started | S→C | 赛事开赛                       |
+| tournament:round_started | S→C | 新一轮开始                 |
+| tournament:match_updated | S→C | 对局结果更新                 |
+| tournament:completed | S→C | 赛事结束                       |
 
 ## 防作弊策略
 

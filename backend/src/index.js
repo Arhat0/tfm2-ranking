@@ -11,6 +11,7 @@ const db = require('./config/db');
 const { JWT_SECRET } = require('./middleware/auth');
 const { initMatchmaking } = require('./services/matchmaking');
 const { initMatchService } = require('./services/matchService');
+const { initTournamentService } = require('./services/tournamentService');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -19,6 +20,9 @@ const matchRoutes = require('./routes/matches');
 const leaderboardRoutes = require('./routes/leaderboard');
 const adminRoutes = require('./routes/admin');
 const roomRoutes = require('./routes/rooms');
+const heroRoutes = require('./routes/heroes');
+const gameRoutes = require('./routes/game');
+const tournamentRoutes = require('./routes/tournaments');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +45,9 @@ app.use('/api/matches', matchRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/heroes', heroRoutes);
+app.use('/api/game', gameRoutes);
+app.use('/api/tournaments', tournamentRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
@@ -88,6 +95,7 @@ io.use((socket, next) => {
 // 初始化服务
 const matchmaking = initMatchmaking(io);
 const matchService = initMatchService(io);
+const tournamentService = initTournamentService(io);
 
 // Socket.io 连接处理
 io.on('connection', (socket) => {
@@ -126,8 +134,8 @@ io.on('connection', (socket) => {
   // 上报结果
   socket.on('match:report', async (data) => {
     try {
-      const { matchId, score, winnerId } = data;
-      const result = await matchService.reportResult(matchId, socket.userId, score, winnerId);
+      const { matchId, score, winnerId, heroData } = data;
+      const result = await matchService.reportResult(matchId, socket.userId, score, winnerId, heroData);
       if (result.success) {
         socket.emit('match:reported', { matchId, message: result.message });
       } else {
@@ -153,6 +161,20 @@ io.on('connection', (socket) => {
       console.error('match:confirm error:', err);
       socket.emit('match:error', { message: '确认失败' });
     }
+  });
+
+  // 订阅锦标赛实时更新
+  socket.on('tournament:join', (data) => {
+    const tournamentId = parseInt(data?.tournamentId || data);
+    if (!tournamentId) return;
+    socket.join(`tournament:${tournamentId}`);
+    console.log(`Socket ${socket.id} joined tournament room ${tournamentId}`);
+  });
+
+  socket.on('tournament:leave', (data) => {
+    const tournamentId = parseInt(data?.tournamentId || data);
+    if (!tournamentId) return;
+    socket.leave(`tournament:${tournamentId}`);
   });
 
   // 断开连接

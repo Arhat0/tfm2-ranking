@@ -174,6 +174,111 @@
           <div v-else class="text-sm text-dark-500">比分不能相同，请调整</div>
         </div>
 
+        <!-- 英雄 BP 上报 -->
+        <div class="mb-5 bg-dark-900 rounded-xl border border-dark-700 overflow-hidden">
+          <button
+            @click="showHeroForm = !showHeroForm"
+            class="w-full px-4 py-3 flex items-center justify-between text-left transition-colors hover:bg-dark-800"
+          >
+            <span class="font-semibold text-white">🛡️ 英雄 BP 数据（选/禁 + 伤害）</span>
+            <span class="text-xs text-dark-400">{{ showHeroForm ? '收起 ▲' : '展开 ▼' }} <span class="ml-1">（选填）</span></span>
+          </button>
+
+          <div v-if="showHeroForm" class="p-4 space-y-5">
+            <!-- 我的队伍 -->
+            <div>
+              <div class="text-sm font-semibold text-primary-400 mb-3">我的队伍（{{ profile?.username }}）</div>
+              <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
+                <div v-for="(slot, i) in myPicks" :key="'mp' + i" class="bg-dark-800 rounded-lg p-2.5 border border-dark-700">
+                  <div class="text-xs text-dark-400 mb-1.5">选人 {{ i + 1 }}</div>
+                  <select
+                    v-model="myPicks[i].heroId"
+                    class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
+                  >
+                    <option :value="0">— 未选择 —</option>
+                    <option v-for="h in heroes" :key="h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
+                  </select>
+                  <div v-if="myPicks[i].heroId" class="flex gap-1.5 mt-1.5">
+                    <input
+                      v-model.number="myPicks[i].damageDealt"
+                      type="number"
+                      min="0"
+                      placeholder="造成"
+                      class="w-1/2 px-1.5 py-1 bg-dark-900 border border-dark-600 rounded text-xs text-orange-300 placeholder-dark-600 focus:outline-none"
+                    />
+                    <input
+                      v-model.number="myPicks[i].damageTaken"
+                      type="number"
+                      min="0"
+                      placeholder="承受"
+                      class="w-1/2 px-1.5 py-1 bg-dark-900 border border-dark-600 rounded text-xs text-red-300 placeholder-dark-600 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-dark-400 shrink-0">禁用：</span>
+                <select
+                  v-for="(b, i) in myBans"
+                  :key="'mb' + i"
+                  v-model="myBans[i]"
+                  class="flex-1 px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
+                >
+                  <option :value="0">— 未选择 —</option>
+                  <option v-for="h in heroes" :key="'mbo' + h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 对手队伍 -->
+            <div class="pt-4 border-t border-dark-700">
+              <div class="text-sm font-semibold text-red-400 mb-3">对手队伍（{{ match?.opponent?.username }}）</div>
+              <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
+                <div v-for="(slot, i) in oppPicks" :key="'op' + i" class="bg-dark-800 rounded-lg p-2.5 border border-dark-700">
+                  <div class="text-xs text-dark-400 mb-1.5">选人 {{ i + 1 }}</div>
+                  <select
+                    v-model="oppPicks[i].heroId"
+                    class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
+                  >
+                    <option :value="0">— 未选择 —</option>
+                    <option v-for="h in heroes" :key="h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
+                  </select>
+                  <div v-if="oppPicks[i].heroId" class="flex gap-1.5 mt-1.5">
+                    <input
+                      v-model.number="oppPicks[i].damageDealt"
+                      type="number"
+                      min="0"
+                      placeholder="造成"
+                      class="w-1/2 px-1.5 py-1 bg-dark-900 border border-dark-600 rounded text-xs text-orange-300 placeholder-dark-600 focus:outline-none"
+                    />
+                    <input
+                      v-model.number="oppPicks[i].damageTaken"
+                      type="number"
+                      min="0"
+                      placeholder="承受"
+                      class="w-1/2 px-1.5 py-1 bg-dark-900 border border-dark-600 rounded text-xs text-red-300 placeholder-dark-600 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-dark-400 shrink-0">禁用：</span>
+                <select
+                  v-for="(b, i) in oppBans"
+                  :key="'ob' + i"
+                  v-model="oppBans[i]"
+                  class="flex-1 px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
+                >
+                  <option :value="0">— 未选择 —</option>
+                  <option v-for="h in heroes" :key="'obo' + h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
+                </select>
+              </div>
+            </div>
+
+            <p class="text-xs text-dark-500">伤害数据可在游戏结算界面查看；每队可上报 5 名上场英雄与 3 个禁用英雄</p>
+          </div>
+        </div>
+
         <button
           @click="handleReport"
           :disabled="reporting || !hasValidScore"
@@ -296,6 +401,7 @@ import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
+import { heroStatsApi } from '../api'
 import UserAvatar from '../components/UserAvatar.vue'
 
 const router = useRouter()
@@ -312,6 +418,42 @@ const reporting = ref(false)
 const confirming = ref(false)
 const starting = ref(false)
 const cancelling = ref(false)
+
+// 英雄 BP 上报状态
+const heroes = ref([])
+const showHeroForm = ref(false)
+const myPicks = ref([])
+const myBans = ref([])
+const oppPicks = ref([])
+const oppBans = ref([])
+
+function emptySlot() {
+  return { heroId: 0, damageDealt: null, damageTaken: null }
+}
+
+function initHeroForm() {
+  myPicks.value = Array.from({ length: 5 }, () => emptySlot())
+  myBans.value = [0, 0, 0]
+  oppPicks.value = Array.from({ length: 5 }, () => emptySlot())
+  oppBans.value = [0, 0, 0]
+}
+
+function buildHeroData() {
+  const picks = (slots) =>
+    slots
+      .filter((s) => s.heroId)
+      .map((s) => ({
+        heroId: s.heroId,
+        damageDealt: parseInt(s.damageDealt) || 0,
+        damageTaken: parseInt(s.damageTaken) || 0,
+      }))
+  const bans = (slots) => slots.filter((b) => b)
+
+  return {
+    me: { picks: picks(myPicks.value), bans: bans(myBans.value) },
+    opponent: { picks: picks(oppPicks.value), bans: bans(oppBans.value) },
+  }
+}
 
 // 快捷比分（BO3 + BO5 常见结果）
 const quickScores = [
@@ -392,7 +534,8 @@ async function handleReport() {
   reporting.value = true
   try {
     const score = `${myScore.value}:${opponentScore.value}`
-    await matchStore.reportResult(match.value.id, score, autoWinnerId.value)
+    const heroData = buildHeroData()
+    await matchStore.reportResult(match.value.id, score, autoWinnerId.value, heroData)
     toastStore.success('比分已上报，等待对手确认')
   } catch (err) {
     toastStore.error(err.response?.data?.error || '上报失败')
@@ -500,6 +643,14 @@ function cleanupSocketListeners() {
 onMounted(async () => {
   await matchStore.fetchCurrentMatch()
   setupSocketListeners()
+  initHeroForm()
+  // 加载英雄列表（用于 BP 上报选择）
+  try {
+    const res = await heroStatsApi.list()
+    heroes.value = res.data.heroes
+  } catch (err) {
+    // 静默失败，不影响比分上报
+  }
 
   // 定时刷新
   refreshInterval = setInterval(() => {

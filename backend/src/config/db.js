@@ -14,9 +14,17 @@ async function initDatabase() {
     throw new Error('DATABASE_URL environment variable is required');
   }
 
+  // SSL 策略：生产环境默认启用（如 Render/Neon），可通过 DB_SSL=false 显式关闭（如本地库）
+  const useSSL =
+    process.env.DB_SSL === 'false'
+      ? false
+      : process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false;
+
   pool = new Pool({
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: useSSL,
     max: 10,
     idleTimeoutMillis: 30000,
   });
