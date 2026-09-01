@@ -17,9 +17,9 @@ class MatchService {
               u2.username as player2_username, u2.game_id as player2_game_id, u2.avatar as player2_avatar
        FROM matches m
        JOIN users u1 ON m.player1_id = u1.id
-       JOIN users u2 ON m.player2_id = u2.id
+       LEFT JOIN users u2 ON m.player2_id = u2.id
        WHERE (m.player1_id = $1 OR m.player2_id = $1)
-         AND m.status IN ('pending', 'in_progress', 'awaiting_confirmation')
+         AND m.status IN ('pending', 'in_progress', 'awaiting_confirmation', 'waiting')
        ORDER BY m.created_at DESC
        LIMIT 1`,
       [userId]
@@ -34,7 +34,7 @@ class MatchService {
               u2.username as player2_username, u2.game_id as player2_game_id, u2.avatar as player2_avatar
        FROM matches m
        JOIN users u1 ON m.player1_id = u1.id
-       JOIN users u2 ON m.player2_id = u2.id
+       LEFT JOIN users u2 ON m.player2_id = u2.id
        WHERE m.id = $1 AND (m.player1_id = $2 OR m.player2_id = $2)`,
       [matchId, userId]
     );
@@ -163,7 +163,6 @@ class MatchService {
         }
 
         // 解析比分，用于小分影响
-        // 解析比分，用于小分影响
         const parsedResult = typeof match.result === 'string' ? JSON.parse(match.result) : match.result;
         let winnerGameScore = null;
         let loserGameScore = null;
@@ -255,8 +254,13 @@ class MatchService {
   async cancelMatch(matchId, userId) {
     const match = await this.getMatchById(matchId, userId);
     if (!match) return { success: false, message: '对局不存在' };
-    if (!['pending', 'in_progress'].includes(match.status)) {
+    if (!['pending', 'in_progress', 'waiting'].includes(match.status)) {
       return { success: false, message: '当前状态无法取消' };
+    }
+
+    // waiting 状态只有创建者可以取消
+    if (match.status === 'waiting' && match.player1_id !== userId) {
+      return { success: false, message: '只有创建者可以取消公开房间' };
     }
 
     // 只允许开始后短时间内取消（5分钟内）
@@ -273,7 +277,14 @@ class MatchService {
     );
 
     this.io.to(`user:${match.player1_id}`).emit('match:cancelled', { matchId, reason: '用户取消' });
-    this.io.to(`user:${match.player2_id}`).emit('match:cancelled', { matchId, reason: '用户取消' });
+    if (match.player2_id) {
+      this.io.to(`user:${match.player2_id}`).emit('match:cancelled', { matchId, reason: '用户取消' });
+    }
+
+    // 通知所有用户公开房间已取消
+    if (match.is_public) {
+      this.io.emit('room:cancelled', { roomId: matchId });
+    }
 
     return { success: true, message: '对局已取消' };
   }

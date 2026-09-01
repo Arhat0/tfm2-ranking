@@ -18,6 +18,7 @@ const matchmakingRoutes = require('./routes/matchmaking');
 const matchRoutes = require('./routes/matches');
 const leaderboardRoutes = require('./routes/leaderboard');
 const adminRoutes = require('./routes/admin');
+const roomRoutes = require('./routes/rooms');
 
 const app = express();
 const server = http.createServer(app);
@@ -39,6 +40,7 @@ app.use('/api/matchmaking', matchmakingRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/rooms', roomRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
@@ -64,6 +66,9 @@ const io = new Server(server, {
     credentials: true,
   },
 });
+
+// 将 io 保存到 app，供路由使用
+app.set('io', io);
 
 // Socket.io 认证中间件
 io.use((socket, next) => {
@@ -161,6 +166,23 @@ io.on('connection', (socket) => {
 // 启动匹配服务
 matchmaking.start();
 
+// 数据库迁移：添加 is_public 字段
+async function runMigrations() {
+  try {
+    // 检查 is_public 列是否存在
+    const checkResult = await db.query(
+      `SELECT column_name FROM information_schema.columns 
+       WHERE table_name = 'matches' AND column_name = 'is_public'`
+    );
+    if (checkResult.rows.length === 0) {
+      await db.query('ALTER TABLE matches ADD COLUMN is_public BOOLEAN DEFAULT FALSE');
+      console.log('Migration: added is_public column to matches table');
+    }
+  } catch (err) {
+    console.error('Migration error:', err);
+  }
+}
+
 // 启动服务器
 const PORT = process.env.PORT || 3000;
 
@@ -169,6 +191,9 @@ async function startServer() {
     // 初始化数据库
     await db.initDatabase();
     console.log('Database initialized');
+
+    // 运行迁移
+    await runMigrations();
 
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

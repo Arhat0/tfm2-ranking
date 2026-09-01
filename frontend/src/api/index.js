@@ -81,4 +81,12 @@ export const adminApi = {
   overrideDispute: (id, winnerId, adminNote) => api.post(`/admin/disputes/${id}/override`, { winnerId, adminNote }),
 }
 
+// 公开房间 API
+export const roomApi = {
+  list: () => api.get('/rooms/public'),
+  create: () => api.post('/rooms/public'),
+  join: (id) => api.post(`/rooms/${id}/join`),
+  cancel: (id) => api.post(`/rooms/${id}/cancel`),
+}
+
 export default api

@@ -55,9 +55,16 @@
     <div v-if="currentMatch" class="bg-yellow-900/30 border border-yellow-700 rounded-xl p-4">
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-yellow-400 font-semibold">你有一场进行中的对局</div>
+          <div class="text-yellow-400 font-semibold">
+            {{ currentMatch.status === 'waiting' ? '你创建的公开房间等待加入' : '你有一场进行中的对局' }}
+          </div>
           <div class="text-yellow-200/70 text-sm mt-1">
-            对手：{{ currentMatch.opponent?.username }} | 状态：{{ statusText }}
+            <template v-if="currentMatch.status === 'waiting'">
+              房间号：{{ currentMatch.roomPassword }} · 等待其他玩家加入
+            </template>
+            <template v-else>
+              对手：{{ currentMatch.opponent?.gameId }} | 状态：{{ statusText }}
+            </template>
           </div>
         </div>
         <router-link
@@ -66,6 +73,72 @@
         >
           查看对局
         </router-link>
+      </div>
+    </div>
+
+    <!-- 公开房间 -->
+    <div class="bg-dark-800 rounded-xl p-6 border border-dark-700">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white">公开房间</h2>
+        <div class="flex items-center gap-2">
+          <button
+            @click="loadPublicRooms"
+            class="text-sm text-dark-400 hover:text-white transition-colors"
+            title="刷新"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+          </button>
+          <button
+            v-if="!currentMatch"
+            @click="createPublicRoom"
+            :disabled="creatingRoom"
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-dark-600 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {{ creatingRoom ? '创建中...' : '+ 创建房间' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="publicRooms.length === 0" class="text-center py-8 text-dark-500">
+        暂无公开房间，点击右上角创建一个吧！
+      </div>
+
+      <div v-else class="space-y-2">
+        <div
+          v-for="room in publicRooms"
+          :key="room.id"
+          class="flex items-center justify-between p-3 bg-dark-900 rounded-lg"
+        >
+          <div class="flex items-center gap-3">
+            <UserAvatar :avatar="room.creator.avatar" :name="room.creator.gameId" size="md" />
+            <div>
+              <div class="text-white font-medium">{{ room.creator.gameId }}</div>
+              <div class="text-xs text-dark-500">
+                {{ room.creator.tier }} · {{ room.creator.rankScore }}分 · 房间号 {{ room.roomPassword }}
+              </div>
+            </div>
+          </div>
+          <div>
+            <button
+              v-if="room.creator.id === profile?.id"
+              @click="cancelPublicRoom(room.id)"
+              class="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm font-medium rounded-lg transition-colors"
+            >
+              取消房间
+            </button>
+            <button
+              v-else-if="!currentMatch"
+              @click="joinPublicRoom(room.id)"
+              :disabled="joiningRoomId === room.id"
+              class="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-dark-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {{ joiningRoomId === room.id ? '加入中...' : '加入' }}
+            </button>
+            <span v-else class="text-xs text-dark-500">对局中</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -371,9 +444,10 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
-import { matchApi, authApi } from '../api'
+import { matchApi, authApi, roomApi } from '../api'
 import TierBadge from '../components/TierBadge.vue'
 import UserAvatar from '../components/UserAvatar.vue'
+import { getSocket } from '../api/socket'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -386,6 +460,11 @@ const recentMatches = ref([])
 const recentAllMatches = ref([])
 const loadingRecent = ref(false)
 const selectedMatch = ref(null)
+
+// 公开房间
+const publicRooms = ref([])
+const creatingRoom = ref(false)
+const joiningRoomId = ref(null)
 
 // 编辑资料
 const showEditModal = ref(false)
@@ -456,6 +535,7 @@ const statusMap = {
   completed: '已完成',
   disputed: '争议中',
   cancelled: '已取消',
+  waiting: '等待加入',
 }
 
 const statusText = computed(() => statusMap[currentMatch.value?.status] || currentMatch.value?.status)
@@ -506,6 +586,76 @@ async function loadAllRecentMatches() {
   }
 }
 
+// 公开房间相关
+async function loadPublicRooms() {
+  try {
+    const res = await roomApi.list()
+    publicRooms.value = res.data.rooms
+  } catch (err) {
+    console.error('Load public rooms error:', err)
+  }
+}
+
+async function createPublicRoom() {
+  creatingRoom.value = true
+  try {
+    const res = await roomApi.create()
+    toastStore.success('公开房间创建成功，房间号：' + res.data.room.roomPassword)
+    await matchStore.fetchCurrentMatch()
+    await loadPublicRooms()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '创建房间失败')
+  } finally {
+    creatingRoom.value = false
+  }
+}
+
+async function joinPublicRoom(roomId) {
+  joiningRoomId.value = roomId
+  try {
+    await roomApi.join(roomId)
+    toastStore.success('成功加入房间')
+    await matchStore.fetchCurrentMatch()
+    router.push('/match/current')
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '加入房间失败')
+  } finally {
+    joiningRoomId.value = null
+  }
+}
+
+async function cancelPublicRoom(roomId) {
+  try {
+    await roomApi.cancel(roomId)
+    toastStore.success('房间已取消')
+    await matchStore.fetchCurrentMatch()
+    await loadPublicRooms()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '取消房间失败')
+  }
+}
+
+// WebSocket 监听公开房间事件
+function setupSocketListeners() {
+  const socket = getSocket()
+  if (!socket) return
+
+  socket.on('room:created', (room) => {
+    // 避免重复添加
+    if (!publicRooms.value.find(r => r.id === room.id)) {
+      publicRooms.value.unshift(room)
+    }
+  })
+
+  socket.on('room:joined', ({ roomId }) => {
+    publicRooms.value = publicRooms.value.filter(r => r.id !== roomId)
+  })
+
+  socket.on('room:cancelled', ({ roomId }) => {
+    publicRooms.value = publicRooms.value.filter(r => r.id !== roomId)
+  })
+}
+
 let refreshInterval = null
 
 onMounted(async () => {
@@ -513,14 +663,23 @@ onMounted(async () => {
   await matchStore.fetchCurrentMatch()
   await loadRecentMatches()
   await loadAllRecentMatches()
+  await loadPublicRooms()
+  setupSocketListeners()
 
-  // 定时刷新当前对局状态
+  // 定时刷新当前对局状态和公开房间
   refreshInterval = setInterval(async () => {
     await matchStore.fetchCurrentMatch()
+    await loadPublicRooms()
   }, 5000)
 })
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
+  const socket = getSocket()
+  if (socket) {
+    socket.off('room:created')
+    socket.off('room:joined')
+    socket.off('room:cancelled')
+  }
 })
 </script>

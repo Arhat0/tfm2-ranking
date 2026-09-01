@@ -9,9 +9,9 @@ class MatchmakingService {
     this.io = io;
     this.queue = []; // { userId, rankScore, joinedAt, socketId }
     this.interval = null;
-    this.initialThreshold = parseInt(process.env.MATCH_INITIAL_THRESHOLD) || 50;
-    this.maxThreshold = parseInt(process.env.MATCH_MAX_THRESHOLD) || 300;
-    this.thresholdStep = parseInt(process.env.MATCH_THRESHOLD_STEP) || 25;
+    this.initialThreshold = parseInt(process.env.MATCH_INITIAL_THRESHOLD) || 100;
+    this.thresholdStep = parseInt(process.env.MATCH_THRESHOLD_STEP) || 50;
+    this.thresholdInterval = parseInt(process.env.MATCH_THRESHOLD_INTERVAL) || 5; // 每N秒扩大一次阈值
     this.matchInterval = parseInt(process.env.MATCH_INTERVAL_MS) || 3000;
   }
 
@@ -91,11 +91,8 @@ class MatchmakingService {
         const waitTimeB = (Date.now() - sorted[j].joinedAt) / 1000;
         const maxWait = Math.max(waitTimeA, waitTimeB);
 
-        // 阈值随等待时间扩大
-        const threshold = Math.min(
-          this.initialThreshold + Math.floor(maxWait / 10) * this.thresholdStep,
-          this.maxThreshold
-        );
+        // 阈值随等待时间扩大（无上限，确保最终能匹配到任何人）
+        const threshold = this.initialThreshold + Math.floor(maxWait / this.thresholdInterval) * this.thresholdStep;
 
         if (scoreDiff <= threshold) {
           matched.push([sorted[i], sorted[j]]);
@@ -129,9 +126,9 @@ class MatchmakingService {
       this.removeFromQueue(playerA.userId);
       this.removeFromQueue(playerB.userId);
 
-      // 获取双方游戏内ID
+      // 获取双方游戏内ID和头像
       const usersResult = await db.query(
-        'SELECT id, username, game_id FROM users WHERE id IN ($1, $2)',
+        'SELECT id, username, game_id, avatar FROM users WHERE id IN ($1, $2)',
         [playerA.userId, playerB.userId]
       );
       const users = usersResult.rows;
@@ -141,14 +138,14 @@ class MatchmakingService {
       // 通知双方
       this.io.to(`user:${playerA.userId}`).emit('match:found', {
         matchId: match.id,
-        opponent: { id: userB.id, username: userB.username, gameId: userB.game_id },
+        opponent: { id: userB.id, username: userB.username, gameId: userB.game_id, avatar: userB.avatar },
         roomPassword,
         message: `匹配成功！对手：${userB.username}（游戏ID：${userB.game_id}），房间密码：${roomPassword}`,
       });
 
       this.io.to(`user:${playerB.userId}`).emit('match:found', {
         matchId: match.id,
-        opponent: { id: userA.id, username: userA.username, gameId: userA.game_id },
+        opponent: { id: userA.id, username: userA.username, gameId: userA.game_id, avatar: userA.avatar },
         roomPassword,
         message: `匹配成功！对手：${userA.username}（游戏ID：${userA.game_id}），房间密码：${roomPassword}`,
       });

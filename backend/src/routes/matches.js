@@ -17,13 +17,14 @@ router.get('/current', authMiddleware, async (req, res) => {
 
     const isPlayer1 = match.player1_id === req.user.id;
     const opponent = isPlayer1
-      ? { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id, avatar: match.player2_avatar }
+      ? (match.player2_id ? { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id, avatar: match.player2_avatar } : null)
       : { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id, avatar: match.player1_avatar };
 
     res.json({
       match: {
         id: match.id,
         status: match.status,
+        isPublic: match.is_public,
         roomPassword: match.room_password,
         opponent,
         result: typeof match.result === 'string' ? JSON.parse(match.result) : match.result,
@@ -223,9 +224,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
     res.json({
       id: match.id,
       status: match.status,
+      isPublic: match.is_public,
       roomPassword: match.room_password,
       player1: { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id, avatar: match.player1_avatar },
-      player2: { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id, avatar: match.player2_avatar },
+      player2: match.player2_id ? { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id, avatar: match.player2_avatar } : null,
       result: typeof match.result === 'string' ? JSON.parse(match.result) : match.result,
       winnerId: match.winner_id,
       isWinner: match.winner_id === req.user.id,

@@ -27,12 +27,24 @@
         >
           {{ statusText }}
         </div>
-        <h1 class="text-2xl font-bold text-white">对局 #{{ match.id }}</h1>
+        <h1 class="text-2xl font-bold text-white">
+          {{ match.status === 'waiting' ? '公开房间 #' + match.id : '对局 #' + match.id }}
+        </h1>
       </div>
 
       <!-- 双方信息 -->
       <div class="bg-dark-800 rounded-xl p-6 border border-dark-700">
-        <div class="flex items-center justify-between">
+        <div v-if="match.status === 'waiting'" class="text-center py-4">
+          <div class="w-16 h-16 bg-primary-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg class="w-8 h-8 text-primary-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+          </div>
+          <p class="text-white font-medium">等待其他玩家加入...</p>
+          <p class="text-dark-400 text-sm mt-1">房间已公开，其他玩家可在大厅加入</p>
+        </div>
+
+        <div v-else class="flex items-center justify-between">
           <div class="text-center flex-1">
             <UserAvatar :avatar="match.opponent?.avatar" :name="match.opponent?.gameId" size="xl" class="mx-auto mb-2" />
             <div class="font-semibold text-white text-lg">{{ match.opponent?.gameId }}</div>
@@ -51,13 +63,30 @@
         </div>
 
         <!-- 房间密码 -->
-        <div v-if="match.status === 'pending' || match.status === 'in_progress'" class="mt-6 pt-6 border-t border-dark-700">
+        <div v-if="['pending', 'in_progress', 'waiting'].includes(match.status)" class="mt-6 pt-6 border-t border-dark-700">
           <div class="text-center">
             <div class="text-sm text-dark-400 mb-1">房间密码</div>
             <div class="text-2xl font-bold text-primary-400 tracking-widest">{{ match.roomPassword }}</div>
             <div class="text-xs text-dark-500 mt-1">请在游戏内使用此密码创建/加入房间</div>
           </div>
         </div>
+      </div>
+
+      <!-- waiting: 等待加入 -->
+      <div v-if="match.status === 'waiting'" class="bg-dark-800 rounded-xl p-6 border border-dark-700 text-center">
+        <p class="text-dark-300 mb-4">等待其他玩家加入你的房间</p>
+        <button
+          @click="handleCancel"
+          class="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors"
+        >
+          取消房间
+        </button>
+        <router-link
+          to="/"
+          class="block mx-auto mt-3 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+        >
+          返回大厅查看
+        </router-link>
       </div>
 
       <!-- pending: 等待开始 -->
@@ -261,7 +290,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
@@ -328,6 +357,7 @@ const reportedWinnerIsMe = computed(() => match.value?.winnerId === profile.valu
 const isWinner = computed(() => match.value?.winnerId === profile.value?.id)
 
 const statusMap = {
+  waiting: { text: '等待加入', class: 'bg-cyan-600/20 text-cyan-400 border border-cyan-600/40' },
   pending: { text: '等待开始', class: 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/40' },
   in_progress: { text: '进行中', class: 'bg-blue-600/20 text-blue-400 border border-blue-600/40' },
   awaiting_confirmation: { text: '等待确认', class: 'bg-purple-600/20 text-purple-400 border border-purple-600/40' },
@@ -389,13 +419,13 @@ async function handleConfirm(agree) {
 
 async function handleCancel() {
   if (cancelling.value) return
-  if (!confirm('确定要取消这场对局吗？')) return
+  if (!confirm('确定要取消吗？')) return
   cancelling.value = true
   try {
     await matchStore.cancelMatch(match.value.id)
     matchStore.clearMatch()
-    toastStore.info('对局已取消')
-    router.push('/matchmaking')
+    toastStore.info('已取消')
+    router.push('/')
   } catch (err) {
     toastStore.error(err.response?.data?.error || '取消失败')
     await matchStore.fetchCurrentMatch()
@@ -440,7 +470,7 @@ function setupSocketListeners() {
   const onCancelled = (data) => {
     matchStore.clearMatch()
     toastStore.info(`对局已取消：${data.reason || ''}`)
-    setTimeout(() => router.push('/matchmaking'), 1000)
+    setTimeout(() => router.push('/'), 1000)
   }
 
   socket.on('match:start', onStart)
@@ -478,7 +508,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  cleanupSocketListeners()
   if (refreshInterval) clearInterval(refreshInterval)
+  cleanupSocketListeners()
 })
 </script>

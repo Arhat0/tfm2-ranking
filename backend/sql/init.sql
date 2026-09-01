@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS matches (
     player1_id INT REFERENCES users(id),
     player2_id INT REFERENCES users(id),
     status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    is_public BOOLEAN DEFAULT FALSE,
     room_password VARCHAR(20),
     result JSONB,
     reported_by INT REFERENCES users(id),
