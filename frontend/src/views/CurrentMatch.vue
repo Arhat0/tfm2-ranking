@@ -185,6 +185,27 @@
           </button>
 
           <div v-if="showHeroForm" class="p-4 space-y-5">
+            <!-- 通用设置：禁用数 + 手动填写提示 -->
+            <div class="flex items-center gap-3 flex-wrap bg-dark-800 rounded-lg px-3 py-2 border border-dark-700">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-dark-300">每队禁用数：</span>
+                <select
+                  v-model.number="banCount"
+                  @change="resizeBans"
+                  class="px-2 py-1 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
+                >
+                  <option :value="0">0 个</option>
+                  <option :value="1">1 个</option>
+                  <option :value="2">2 个</option>
+                  <option :value="3">3 个</option>
+                  <option :value="4">4 个</option>
+                  <option :value="5">5 个</option>
+                  <option :value="6">6 个</option>
+                </select>
+              </div>
+              <span class="text-xs text-primary-300">💡 可直接手动填写英雄与伤害数字，无需等待截图识别</span>
+            </div>
+
             <!-- 我的队伍 -->
             <div>
               <div class="text-sm font-semibold text-primary-400 mb-3">我的队伍（{{ profile?.username }}）</div>
@@ -198,7 +219,7 @@
                     <option :value="0">— 未选择 —</option>
                     <option v-for="h in heroes" :key="h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
                   </select>
-                  <div v-if="myPicks[i].heroId" class="flex gap-1.5 mt-1.5">
+                  <div class="flex gap-1.5 mt-1.5">
                     <input
                       v-model.number="myPicks[i].damageDealt"
                       type="number"
@@ -243,7 +264,7 @@
                     <option :value="0">— 未选择 —</option>
                     <option v-for="h in heroes" :key="h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
                   </select>
-                  <div v-if="oppPicks[i].heroId" class="flex gap-1.5 mt-1.5">
+                  <div class="flex gap-1.5 mt-1.5">
                     <input
                       v-model.number="oppPicks[i].damageDealt"
                       type="number"
@@ -650,6 +671,7 @@ const myPicks = ref([])
 const myBans = ref([])
 const oppPicks = ref([])
 const oppBans = ref([])
+const banCount = ref(parseInt(localStorage.getItem('tfm2_ban_count')) || 3)
 
 function emptySlot() {
   return { heroId: 0, damageDealt: null, damageTaken: null }
@@ -657,9 +679,23 @@ function emptySlot() {
 
 function initHeroForm() {
   myPicks.value = Array.from({ length: 5 }, () => emptySlot())
-  myBans.value = [0, 0, 0]
+  myBans.value = Array.from({ length: banCount.value }, () => 0)
   oppPicks.value = Array.from({ length: 5 }, () => emptySlot())
-  oppBans.value = [0, 0, 0]
+  oppBans.value = Array.from({ length: banCount.value }, () => 0)
+}
+
+/** 调整禁用数量（保留已选值） */
+function resizeBans() {
+  const n = Math.max(0, Math.min(6, banCount.value || 0))
+  localStorage.setItem('tfm2_ban_count', String(n))
+  myBans.value = resizeArray(myBans.value, n)
+  oppBans.value = resizeArray(oppBans.value, n)
+}
+
+function resizeArray(arr, n) {
+  const next = Array.from({ length: n }, () => 0)
+  for (let i = 0; i < Math.min(arr.length, n); i++) next[i] = arr[i]
+  return next
 }
 
 function buildHeroData() {
@@ -875,6 +911,9 @@ onMounted(async () => {
   } catch (err) {
     // 静默失败，不影响比分上报
   }
+
+  // 后台预热 OCR 引擎（下载 wasm/语言包），点击识别时不再等待
+  getOcrWorker().catch(() => {})
 
   // 定时刷新
   refreshInterval = setInterval(() => {
