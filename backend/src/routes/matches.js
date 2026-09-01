@@ -153,40 +153,8 @@ router.get('/history', authMiddleware, async (req, res) => {
   }
 });
 
-// 对局详情
-router.get('/:id', authMiddleware, async (req, res) => {
-  try {
-    const matchService = getMatchService();
-    const match = await matchService.getMatchById(req.params.id, req.user.id);
-
-    if (!match) {
-      return res.status(404).json({ error: '对局不存在' });
-    }
-
-    const isPlayer1 = match.player1_id === req.user.id;
-
-    res.json({
-      id: match.id,
-      status: match.status,
-      roomPassword: match.room_password,
-      player1: { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id },
-      player2: { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id },
-      result: typeof match.result === 'string' ? JSON.parse(match.result) : match.result,
-      winnerId: match.winner_id,
-      isWinner: match.winner_id === req.user.id,
-      isPlayer1,
-      createdAt: match.created_at,
-      startedAt: match.started_at,
-      reportedAt: match.reported_at,
-      finishedAt: match.finished_at,
-    });
-  } catch (err) {
-    console.error('Get match detail error:', err);
-    res.status(500).json({ error: '服务器内部错误' });
-  }
-});
-
 // 公开：所有人最近对局记录（无需登录）
+// 注意：必须在 /:id 之前定义，否则会被 /:id 拦截
 router.get('/public/recent', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
@@ -232,6 +200,39 @@ router.get('/public/recent', async (req, res) => {
     res.json({ matches, total: matches.length });
   } catch (err) {
     console.error('Get recent matches error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 对局详情
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const matchService = getMatchService();
+    const match = await matchService.getMatchById(req.params.id, req.user.id);
+
+    if (!match) {
+      return res.status(404).json({ error: '对局不存在' });
+    }
+
+    const isPlayer1 = match.player1_id === req.user.id;
+
+    res.json({
+      id: match.id,
+      status: match.status,
+      roomPassword: match.room_password,
+      player1: { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id },
+      player2: { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id },
+      result: typeof match.result === 'string' ? JSON.parse(match.result) : match.result,
+      winnerId: match.winner_id,
+      isWinner: match.winner_id === req.user.id,
+      isPlayer1,
+      createdAt: match.created_at,
+      startedAt: match.started_at,
+      reportedAt: match.reported_at,
+      finishedAt: match.finished_at,
+    });
+  } catch (err) {
+    console.error('Get match detail error:', err);
     res.status(500).json({ error: '服务器内部错误' });
   }
 });
