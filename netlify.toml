@@ -2,3 +2,9 @@
   base = "frontend"
   command = "npm run build"
   publish = "dist"
+
+# SPA 路由重定向：所有路径都返回 index.html，由前端路由接管
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
