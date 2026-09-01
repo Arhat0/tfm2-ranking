@@ -140,6 +140,7 @@ const waitSeconds = ref(0)
 const queueSize = ref(0)
 let waitTimer = null
 let queueTimer = null
+let matchCheckTimer = null
 let socketListeners = []
 
 async function fetchQueueSize() {
@@ -147,8 +148,38 @@ async function fetchQueueSize() {
     const res = await matchmakingApi.queueSize()
     queueSize.value = res.data.queueSize
   } catch (err) {
-    // 静默失败，不影响用户体验
+    // 静默失败
   }
+}
+
+// 定时检查是否有新对局（WebSocket 推送失败时的兜底）
+async function checkCurrentMatch() {
+  try {
+    const match = await matchStore.fetchCurrentMatch()
+    if (match && match.status === 'pending' && !matchedData.value) {
+      // 发现新对局，构造 matchedData 并跳转
+      const isPlayer1 = match.player1Id === profile.value?.id
+      const opponent = isPlayer1
+        ? { id: match.player2Id, username: match.player2Username, gameId: match.player2GameId, avatar: match.player2Avatar }
+        : { id: match.player1Id, username: match.player1Username, gameId: match.player1GameId, avatar: match.player1Avatar }
+      matchStore.setMatchedData({
+        matchId: match.id,
+        opponent,
+        roomPassword: match.roomPassword,
+      })
+      toastStore.success('匹配成功！')
+      clearTimers()
+    }
+  } catch (err) {
+    // 静默失败
+  }
+}
+
+function clearTimers() {
+  if (waitTimer) clearInterval(waitTimer)
+  if (matchCheckTimer) clearInterval(matchCheckTimer)
+  waitTimer = null
+  matchCheckTimer = null
 }
 
 const formattedWaitTime = computed(() => {
@@ -165,6 +196,8 @@ async function handleStart() {
     waitTimer = setInterval(() => {
       waitSeconds.value++
     }, 1000)
+    // 每2秒检查一次当前对局，确保 WebSocket 推送失败时也能发现匹配成功
+    matchCheckTimer = setInterval(checkCurrentMatch, 2000)
   } catch (err) {
     toastStore.error(err.response?.data?.error || '开始匹配失败')
   } finally {
@@ -174,7 +207,7 @@ async function handleStart() {
 
 function handleCancel() {
   matchStore.cancelMatchmaking()
-  if (waitTimer) clearInterval(waitTimer)
+  clearTimers()
   waitSeconds.value = 0
   toastStore.info('已取消匹配')
 }
@@ -210,16 +243,15 @@ function setupSocketListeners() {
 
   const onFound = (data) => {
     matchStore.setMatchedData(data)
-    if (waitTimer) clearInterval(waitTimer)
+    clearTimers()
     toastStore.success('匹配成功！')
-    // 获取完整对局信息，确保状态同步
     matchStore.fetchCurrentMatch()
   }
 
   const onCancelled = (data) => {
     matchStore.isSearching = false
     matchStore.matchedData = null
-    if (waitTimer) clearInterval(waitTimer)
+    clearTimers()
     toastStore.info(`匹配已取消：${data.reason || '未知原因'}`)
   }
 
@@ -255,14 +287,14 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (waitTimer) clearInterval(waitTimer)
   if (queueTimer) clearInterval(queueTimer)
+  clearTimers()
   cleanupSocketListeners()
 })
 
 // 如果有进行中的对局，自动跳转
 watch(currentMatch, (match) => {
-  if (match && !matchedData.value) {
+  if (match && !matchedData.value && match.status !== 'waiting') {
     router.push('/match/current')
   }
 })
