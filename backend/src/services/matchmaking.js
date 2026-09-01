@@ -9,9 +9,9 @@ class MatchmakingService {
     this.io = io;
     this.queue = []; // { userId, rankScore, joinedAt, socketId }
     this.interval = null;
-    this.initialThreshold = parseInt(process.env.MATCH_INITIAL_THRESHOLD) || 100;
-    this.thresholdStep = parseInt(process.env.MATCH_THRESHOLD_STEP) || 50;
-    this.thresholdInterval = parseInt(process.env.MATCH_THRESHOLD_INTERVAL) || 5; // 每N秒扩大一次阈值
+    this.initialThreshold = parseInt(process.env.MATCH_INITIAL_THRESHOLD) || 200;
+    this.thresholdStep = parseInt(process.env.MATCH_THRESHOLD_STEP) || 100;
+    this.thresholdInterval = parseInt(process.env.MATCH_THRESHOLD_INTERVAL) || 3; // 每N秒扩大一次阈值
     this.matchInterval = parseInt(process.env.MATCH_INTERVAL_MS) || 3000;
   }
 

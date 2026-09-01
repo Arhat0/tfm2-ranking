@@ -12,9 +12,9 @@ router.post('/start', authMiddleware, async (req, res) => {
     const matchmaking = getMatchmaking();
     const matchService = getMatchService();
 
-    // 检查是否有进行中的对局
-    const currentMatch = await matchService.getCurrentMatch(req.user.id);
-    if (currentMatch) {
+    // 检查是否有进行中的对局（公开房间 waiting 状态不影响匹配）
+    const hasActive = await matchService.hasActiveMatch(req.user.id);
+    if (hasActive) {
       return res.status(400).json({ error: '你已有进行中的对局，请先完成或取消' });
     }
 

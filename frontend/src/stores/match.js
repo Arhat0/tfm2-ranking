@@ -19,9 +19,12 @@ export const useMatchStore = defineStore('match', () => {
     matchedData.value = null
     const socket = getSocket()
     const socketId = socket?.id
-    await matchmakingApi.start(socketId)
-    isSearching.value = true
-    searchStartTime.value = Date.now()
+    const res = await matchmakingApi.start(socketId)
+    if (res.data?.success) {
+      isSearching.value = true
+      searchStartTime.value = Date.now()
+    }
+    return res.data
   }
 
   async function cancelMatchmaking() {

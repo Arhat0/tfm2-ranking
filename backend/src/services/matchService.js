@@ -27,6 +27,18 @@ class MatchService {
     return result.rows[0] || null;
   }
 
+  // 检查是否有进行中的对局（不包含 waiting 状态的公开房间）
+  async hasActiveMatch(userId) {
+    const result = await db.query(
+      `SELECT id FROM matches
+       WHERE (player1_id = $1 OR player2_id = $1)
+         AND status IN ('pending', 'in_progress', 'awaiting_confirmation')
+       LIMIT 1`,
+      [userId]
+    );
+    return result.rows.length > 0;
+  }
+
   async getMatchById(matchId, userId) {
     const result = await db.query(
       `SELECT m.*,
