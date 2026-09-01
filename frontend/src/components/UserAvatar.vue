@@ -1,11 +1,10 @@
 <template>
   <div
     class="rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
-    :class="sizeClass"
-    :style="bgStyle"
+    :class="[sizeClass, bgClass]"
   >
     <img
-      v-if="avatar"
+      v-if="avatar && !avatarError"
       :src="avatar"
       :alt="name"
       class="w-full h-full object-cover"
@@ -31,7 +30,7 @@ const props = defineProps({
   },
   size: {
     type: String,
-    default: 'md', // sm, md, lg, xl
+    default: 'md',
   },
 })
 
@@ -52,9 +51,8 @@ const initial = computed(() => {
   return props.name.charAt(0).toUpperCase()
 })
 
-// 根据名字生成背景色
-const bgStyle = computed(() => {
-  if (props.avatar && !avatarError.value) return {}
+const bgClass = computed(() => {
+  if (props.avatar && !avatarError.value) return ''
   const colors = [
     'bg-primary-600',
     'bg-green-600',
@@ -69,6 +67,6 @@ const bgStyle = computed(() => {
   for (let i = 0; i < props.name.length; i++) {
     hash = props.name.charCodeAt(i) + ((hash << 5) - hash)
   }
-  return { backgroundColor: colors[Math.abs(hash) % colors.length].replace('bg-', '') }
+  return colors[Math.abs(hash) % colors.length]
 })
 </script>
