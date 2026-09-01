@@ -73,23 +73,17 @@ NODE_ENV=production node src/index.js
 
 访问 http://localhost:3000
 
-## 默认管理员账号
-
-首次启动后，可通过数据库手动创建管理员，或注册后将 `is_admin` 设为 `true`。
-
-- 邮箱：`admin@tfm2.local`
-- 密码：`admin123`
-- 初始积分：1500（Gold 段位）
-
 ## 核心功能
 
 ### 用户系统
+
 - 用户注册/登录（JWT 认证）
 - 修改用户名和游戏ID（战队名）
 - 上传自定义头像（支持 JPG/PNG/GIF/WebP，最大 5MB）
 - 无头像用户自动显示首字母 + 随机背景色
 
 ### 匹配系统
+
 - 实时匹配队列（WebSocket 推送）
 - 分数差阈值随等待时间动态扩大（初始 50，每 15 秒 +25，上限 300）
 - 实时显示当前匹配人数
@@ -97,6 +91,7 @@ NODE_ENV=production node src/index.js
 - 匹配成功后双方确认进入游戏
 
 ### 对局系统
+
 - 比分上报 + 双方确认机制
 - 快捷比分按钮 + 大号步进器，自动判断胜者
 - 败方可提出争议，管理员仲裁
@@ -104,6 +99,7 @@ NODE_ENV=production node src/index.js
 - 对局取消（开始后短时间内有效）
 
 ### 积分系统
+
 - Elo 积分结算
 - K 因子按分数段调整（<1400: 32, <1800: 24, ≥1800: 16）
 - 比分差距影响积分变化：
@@ -114,6 +110,7 @@ NODE_ENV=production node src/index.js
 - 积分历史记录
 
 ### 数据展示
+
 - 个人排位分、胜率、连胜、最近战绩
 - 排行榜（前三名突出展示）
 - 历史战绩查询（分页）
@@ -121,6 +118,7 @@ NODE_ENV=production node src/index.js
 - 对局详情弹窗（双方头像、比分、积分变化）
 
 ### 管理员后台
+
 - 用户列表（含排位数据）
 - 删除用户（不能删除自己）
 - 争议对局列表
@@ -176,35 +174,39 @@ tfm2-ranking/
 
 ## 段位规则
 
-| 段位 | 分数范围 | 颜色 |
-|------|----------|------|
-| Bronze | 0 - 1199 | #CD7F32 |
-| Silver | 1200 - 1399 | #C0C0C0 |
-| Gold | 1400 - 1599 | #FFD700 |
+| 段位     | 分数范围    | 颜色    |
+| -------- | ----------- | ------- |
+| Bronze   | 0 - 1199    | #CD7F32 |
+| Silver   | 1200 - 1399 | #C0C0C0 |
+| Gold     | 1400 - 1599 | #FFD700 |
 | Platinum | 1600 - 1799 | #00CED1 |
-| Diamond | 1800 - 1999 | #B9F2FF |
-| Master | 2000+ | #FF6B6B |
+| Diamond  | 1800 - 1999 | #B9F2FF |
+| Master   | 2000+       | #FF6B6B |
 
 新用户初始积分 1200（Silver 段位）。
 
 ## API 文档
 
 ### 认证
+
 - `POST /api/auth/register` - 注册
 - `POST /api/auth/login` - 登录
 
 ### 用户
+
 - `GET /api/users/me` - 获取当前用户信息（含排位数据、头像）
 - `PUT /api/users/me` - 修改用户名和游戏ID
 - `POST /api/users/avatar` - 上传头像（multipart/form-data，字段名 `avatar`）
 
 ### 匹配
+
 - `POST /api/matchmaking/start` - 开始匹配
 - `POST /api/matchmaking/cancel` - 取消匹配
 - `GET /api/matchmaking/status` - 查询匹配状态
 - `GET /api/matchmaking/queue-size` - 公开：当前匹配人数
 
 ### 对局
+
 - `GET /api/matches/current` - 当前对局
 - `POST /api/matches/:id/start` - 确认进入游戏
 - `POST /api/matches/:id/report` - 上报比分
@@ -215,9 +217,11 @@ tfm2-ranking/
 - `GET /api/matches/:id` - 对局详情
 
 ### 排行榜
+
 - `GET /api/leaderboard` - 排行榜（分页）
 
 ### 管理员（需 is_admin）
+
 - `GET /api/admin/users` - 用户列表
 - `DELETE /api/admin/users/:id` - 删除用户
 - `GET /api/admin/disputes` - 争议对局列表
@@ -227,16 +231,16 @@ tfm2-ranking/
 
 ## WebSocket 事件
 
-| 事件 | 方向 | 说明 |
-|------|------|------|
-| match:search | C→S | 开始匹配 |
-| match:cancel | C→S | 取消匹配 |
-| match:found | S→C | 匹配成功（含对手信息、房间密码） |
-| match:start | S→C | 对局开始 |
-| match:report | C→S | 上报结果 |
-| match:confirm | C→S | 确认/争议 |
-| match:result | S→C | 结算通知（含积分变化） |
-| match:cancelled | S→C | 对局取消 |
+| 事件            | 方向 | 说明                             |
+| --------------- | ---- | -------------------------------- |
+| match:search    | C→S | 开始匹配                         |
+| match:cancel    | C→S | 取消匹配                         |
+| match:found     | S→C | 匹配成功（含对手信息、房间密码） |
+| match:start     | S→C | 对局开始                         |
+| match:report    | C→S | 上报结果                         |
+| match:confirm   | C→S | 确认/争议                        |
+| match:result    | S→C | 结算通知（含积分变化）           |
+| match:cancelled | S→C | 对局取消                         |
 
 ## 防作弊策略
 
@@ -249,6 +253,7 @@ tfm2-ranking/
 ## 部署
 
 支持多种部署方式，详见 `DEPLOY.md`：
+
 - Docker / Docker Compose
 - Render（需信用卡）
 - 其他支持 Node.js + PostgreSQL 的平台
