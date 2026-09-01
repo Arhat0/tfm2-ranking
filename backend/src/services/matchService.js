@@ -163,11 +163,12 @@ class MatchService {
         }
 
         // 解析比分，用于小分影响
-        const matchResult = typeof match.result === 'string' ? JSON.parse(match.result) : match.result;
+        // 解析比分，用于小分影响
+        const parsedResult = typeof match.result === 'string' ? JSON.parse(match.result) : match.result;
         let winnerGameScore = null;
         let loserGameScore = null;
-        if (matchResult?.score && matchResult.score.includes(':')) {
-          const parts = matchResult.score.split(':').map(Number);
+        if (parsedResult?.score && parsedResult.score.includes(':')) {
+          const parts = parsedResult.score.split(':').map(Number);
           if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
             // 判断胜者是 player1 还是 player2，对应比分位置
             if (winnerId === match.player1_id) {
