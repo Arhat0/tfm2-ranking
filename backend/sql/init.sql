@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
     status VARCHAR(20) DEFAULT 'registration',
     max_rounds INT DEFAULT 5,
     current_round INT DEFAULT 0,
+    settings JSONB DEFAULT '{}',
     created_by INT REFERENCES users(id),
     created_at TIMESTAMP DEFAULT NOW(),
     started_at TIMESTAMP,
@@ -115,6 +116,8 @@ CREATE TABLE IF NOT EXISTS tournament_participants (
     losses INT DEFAULT 0,
     byes INT DEFAULT 0,
     buchholz INT DEFAULT 0,
+    group_number INT DEFAULT 0,
+    eliminated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW(),
     PRIMARY KEY (tournament_id, user_id)
 );
@@ -123,6 +126,7 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
     id SERIAL PRIMARY KEY,
     tournament_id INT REFERENCES tournaments(id) ON DELETE CASCADE,
     round_number INT NOT NULL,
+    bracket VARCHAR(10) DEFAULT 'main',
     player1_id INT REFERENCES users(id),
     player2_id INT REFERENCES users(id),
     score VARCHAR(20),

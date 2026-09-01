@@ -62,12 +62,12 @@
           </div>
         </div>
 
-        <!-- 房间密码 -->
+        <!-- 房间标题 -->
         <div v-if="['pending', 'in_progress', 'waiting'].includes(match.status)" class="mt-6 pt-6 border-t border-dark-700">
           <div class="text-center">
-            <div class="text-sm text-dark-400 mb-1">房间密码</div>
+            <div class="text-sm text-dark-400 mb-1">房间标题（房名）</div>
             <div class="text-2xl font-bold text-primary-400 tracking-widest">{{ match.roomPassword }}</div>
-            <div class="text-xs text-dark-500 mt-1">请在游戏内使用此密码创建/加入房间</div>
+            <div class="text-xs text-dark-500 mt-1">请在游戏内使用此标题创建房间，对手在房间列表中找到并加入</div>
           </div>
         </div>
       </div>

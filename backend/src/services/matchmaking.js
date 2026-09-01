@@ -111,13 +111,14 @@ class MatchmakingService {
 
   async createMatch(playerA, playerB) {
     try {
-      const roomPassword = generateRoomCode();
+      // TFM2 建房不需要密码，房间以"标题"标识：生成唯一房名代码供双方在游戏大厅创建/查找
+      const roomTitle = `TFM2-${generateRoomCode()}`;
 
       const result = await db.query(
         `INSERT INTO matches (player1_id, player2_id, status, room_password, created_at)
          VALUES ($1, $2, 'pending', $3, NOW())
          RETURNING id, player1_id, player2_id, status, room_password, created_at`,
-        [playerA.userId, playerB.userId, roomPassword]
+        [playerA.userId, playerB.userId, roomTitle]
       );
 
       const match = result.rows[0];
@@ -139,15 +140,15 @@ class MatchmakingService {
       this.io.to(`user:${playerA.userId}`).emit('match:found', {
         matchId: match.id,
         opponent: { id: userB.id, username: userB.username, gameId: userB.game_id, avatar: userB.avatar },
-        roomPassword,
-        message: `匹配成功！对手：${userB.username}（游戏ID：${userB.game_id}），房间密码：${roomPassword}`,
+        roomPassword: roomTitle,
+        message: `匹配成功！对手：${userB.username}（游戏ID：${userB.game_id}），请在游戏内创建/加入房间，房间标题：${roomTitle}`,
       });
 
       this.io.to(`user:${playerB.userId}`).emit('match:found', {
         matchId: match.id,
         opponent: { id: userA.id, username: userA.username, gameId: userA.game_id, avatar: userA.avatar },
-        roomPassword,
-        message: `匹配成功！对手：${userA.username}（游戏ID：${userA.game_id}），房间密码：${roomPassword}`,
+        roomPassword: roomTitle,
+        message: `匹配成功！对手：${userA.username}（游戏ID：${userA.game_id}），请在游戏内创建/加入房间，房间标题：${roomTitle}`,
       });
 
       console.log(`Match created: ${match.id} between ${playerA.userId} and ${playerB.userId}`);

@@ -188,7 +188,7 @@ io.on('connection', (socket) => {
 // 启动匹配服务
 matchmaking.start();
 
-// 数据库迁移：添加 is_public 字段
+// 数据库迁移
 async function runMigrations() {
   try {
     // 检查 is_public 列是否存在
@@ -200,6 +200,23 @@ async function runMigrations() {
       await db.query('ALTER TABLE matches ADD COLUMN is_public BOOLEAN DEFAULT FALSE');
       console.log('Migration: added is_public column to matches table');
     }
+
+    // 锦标赛多赛制：settings / group_number / eliminated / bracket 列
+    const addColumnIfMissing = async (table, column, ddl) => {
+      const r = await db.query(
+        `SELECT column_name FROM information_schema.columns 
+         WHERE table_name = $1 AND column_name = $2`,
+        [table, column]
+      );
+      if (r.rows.length === 0) {
+        await db.query(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+        console.log(`Migration: added ${table}.${column}`);
+      }
+    };
+    await addColumnIfMissing('tournaments', 'settings', 'settings JSONB DEFAULT \'{}\'');
+    await addColumnIfMissing('tournament_participants', 'group_number', 'group_number INT DEFAULT 0');
+    await addColumnIfMissing('tournament_participants', 'eliminated', 'eliminated BOOLEAN DEFAULT FALSE');
+    await addColumnIfMissing('tournament_matches', 'bracket', 'bracket VARCHAR(10) DEFAULT \'main\'');
   } catch (err) {
     console.error('Migration error:', err);
   }

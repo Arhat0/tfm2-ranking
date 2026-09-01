@@ -1,8 +1,8 @@
 const db = require('../config/db');
 
 /**
- * 锦标赛服务（瑞士轮）
- * 功能：创建/报名/开赛/抽签配对/上报比分/积分排名/留档
+ * 锦标赛服务（多赛制）
+ * 支持赛制：swiss（瑞士轮）、single_elim（单败淘汰）、double_elim（双败淘汰）、group（小组赛+淘汰赛）
  */
 class TournamentService {
   constructor(io) {
@@ -60,24 +60,40 @@ class TournamentService {
       params.push(roundNumber);
       sql += ' AND tm.round_number = $2';
     }
-    sql += ' ORDER BY tm.round_number, tm.id';
+    sql += ' ORDER BY tm.round_number, tm.bracket, tm.id';
     const result = await db.query(sql, params);
     return result.rows;
   }
 
+  parseSettings(tournament) {
+    let s = {};
+    if (typeof tournament.settings === 'string') {
+      try { s = JSON.parse(tournament.settings); } catch {}
+    } else if (tournament.settings) {
+      s = tournament.settings;
+    }
+    return {
+      bestOf: [1, 3, 5].includes(parseInt(s.bestOf)) ? parseInt(s.bestOf) : 3,
+      groupSize: Math.min(8, Math.max(2, parseInt(s.groupSize) || 4)),
+      qualifiersPerGroup: Math.min(3, Math.max(1, parseInt(s.qualifiersPerGroup) || 2)),
+    };
+  }
+
   // ===== 创建 / 报名 =====
 
-  async createTournament(name, description, maxRounds, creatorId) {
+  async createTournament(name, description, format, maxRounds, settings, creatorId) {
     if (!name || name.trim().length < 2) {
       return { success: false, message: '赛事名称至少2个字符' };
     }
-    const rounds = Math.max(1, Math.min(parseInt(maxRounds) || 5, 10));
+    const fmt = ['swiss', 'single_elim', 'double_elim', 'group'].includes(format) ? format : 'swiss';
+    const rounds = Math.max(1, Math.min(parseInt(maxRounds) || 5, 12));
+    const s = JSON.stringify(settings || {});
 
     const result = await db.query(
-      `INSERT INTO tournaments (name, description, format, status, max_rounds, created_by, created_at)
-       VALUES ($1, $2, 'swiss', 'registration', $3, $4, NOW())
+      `INSERT INTO tournaments (name, description, format, status, max_rounds, settings, created_by, created_at)
+       VALUES ($1, $2, $3, 'registration', $4, $5, $6, NOW())
        RETURNING id`,
-      [name.trim(), description || '', rounds, creatorId]
+      [name.trim(), description || '', fmt, rounds, s, creatorId]
     );
     return { success: true, tournamentId: result.rows[0].id };
   }
@@ -97,7 +113,6 @@ class TournamentService {
       return { success: false, message: '你已报名该赛事' };
     }
 
-    // 种子：按当前排位分从高到低
     const profileResult = await db.query(
       'SELECT rank_score FROM player_profiles WHERE user_id = $1',
       [userId]
@@ -133,11 +148,8 @@ class TournamentService {
     return { success: true, message: '已退出报名' };
   }
 
-  // ===== 开赛与配对 =====
+  // ===== 开赛 =====
 
-  /**
-   * 开始赛事：确定种子顺序，生成第一轮配对
-   */
   async startTournament(tournamentId, user) {
     const tournament = await this.getTournament(tournamentId);
     if (!tournament) return { success: false, message: '赛事不存在' };
@@ -161,12 +173,25 @@ class TournamentService {
        ORDER BY pp.rank_score DESC, tp.seed`,
       [tournamentId]
     );
-
     for (let i = 0; i < sorted.rows.length; i++) {
       await db.query(
         'UPDATE tournament_participants SET seed = $1 WHERE tournament_id = $2 AND user_id = $3',
         [i + 1, tournamentId, sorted.rows[i].user_id]
       );
+    }
+
+    // 小组赛：按种子分配小组
+    if (tournament.format === 'group') {
+      const settings = this.parseSettings(tournament);
+      const size = settings.groupSize;
+      const fresh = await this.getParticipants(tournamentId);
+      for (const p of fresh) {
+        const group = Math.ceil(p.seed / size);
+        await db.query(
+          'UPDATE tournament_participants SET group_number = $1 WHERE tournament_id = $2 AND user_id = $3',
+          [group, tournamentId, p.user_id]
+        );
+      }
     }
 
     await db.query(
@@ -180,9 +205,6 @@ class TournamentService {
     return { success: true, message: '赛事已开始，第一轮已生成' };
   }
 
-  /**
-   * 开始下一轮
-   */
   async startNextRound(tournamentId, user) {
     const tournament = await this.getTournament(tournamentId);
     if (!tournament) return { success: false, message: '赛事不存在' };
@@ -196,7 +218,6 @@ class TournamentService {
       return { success: false, message: '已达最大轮数' };
     }
 
-    // 检查当前轮次是否全部完成
     const pending = await db.query(
       `SELECT COUNT(*) AS count FROM tournament_matches
        WHERE tournament_id = $1 AND round_number = $2 AND status = 'pending'`,
@@ -211,60 +232,52 @@ class TournamentService {
       'UPDATE tournaments SET current_round = $1 WHERE id = $2',
       [nextRound, tournamentId]
     );
-
     await this.generateRound(tournamentId, nextRound);
-
     this.emitUpdate(tournamentId, 'tournament:round_started', { tournamentId, round: nextRound });
     return { success: true, message: `第 ${nextRound} 轮已生成` };
   }
 
-  /**
-   * 瑞士轮配对算法：按积分分组折叠配对，避免重复交手，奇数时低种子轮空
-   */
-  async generateRound(tournamentId, roundNumber) {
-    const participants = await this.getParticipants(tournamentId);
-    const playedPairs = await this.getPlayedPairs(tournamentId);
+  // ===== 配对生成（按赛制分发） =====
 
-    const { pairs, bye } = this.pairPlayers(participants, playedPairs);
+  async generateRound(tournamentId, roundNumber) {
+    const tournament = await this.getTournament(tournamentId);
+    const participants = await this.getParticipants(tournamentId);
+
+    switch (tournament.format) {
+      case 'single_elim':
+        return await this.generateSingleElimRound(tournament, participants, roundNumber);
+      case 'double_elim':
+        return await this.generateDoubleElimRound(tournament, participants, roundNumber);
+      case 'group':
+        return await this.generateGroupRound(tournament, participants, roundNumber);
+      default:
+        return await this.generateSwissRound(tournament, participants, roundNumber);
+    }
+  }
+
+  // ---- 瑞士轮 ----
+
+  async generateSwissRound(tournament, participants, roundNumber) {
+    const playedPairs = await this.getPlayedPairs(tournament.id);
+    const active = participants.filter((p) => !p.eliminated);
+    const { pairs, bye } = this.pairPlayers(active, playedPairs);
 
     for (const [a, b] of pairs) {
-      await db.query(
-        `INSERT INTO tournament_matches (tournament_id, round_number, player1_id, player2_id, status, created_at)
-         VALUES ($1, $2, $3, $4, 'pending', NOW())`,
-        [tournamentId, roundNumber, a.user_id, b.user_id]
-      );
+      await this.insertMatch(tournament.id, roundNumber, 'main', a.user_id, b.user_id);
     }
-
     if (bye) {
-      // 轮空：自动获胜
-      await db.query(
-        `INSERT INTO tournament_matches (tournament_id, round_number, player1_id, player2_id, score, winner_id, status, finished_at, created_at)
-         VALUES ($1, $2, $3, NULL, '轮空', $4, 'completed', NOW(), NOW())`,
-        [tournamentId, roundNumber, bye.user_id, bye.user_id]
-      );
-      await db.query(
-        `UPDATE tournament_participants
-         SET points = points + 1, wins = wins + 1, byes = byes + 1
-         WHERE tournament_id = $1 AND user_id = $2`,
-        [tournamentId, bye.user_id]
-      );
+      await this.insertMatch(tournament.id, roundNumber, 'main', bye.user_id, null, '轮空', bye.user_id);
+      await this.addByeWin(tournament.id, bye.user_id);
     }
-
-    await this.recomputeBuchholz(tournamentId);
+    await this.recomputeBuchholz(tournament.id);
     return { pairs: pairs.length, bye: !!bye };
   }
 
-  /**
-   * 瑞士轮配对核心逻辑
-   * @param {Array} players 参赛者（含 points/buchholz/seed/byes）
-   * @param {Set} playedPairs 已交手对 { '1-2' }
-   */
   pairPlayers(players, playedPairs) {
     const sorted = [...players].sort(
       (a, b) => b.points - a.points || b.buchholz - a.buchholz || a.seed - b.seed
     );
 
-    // 奇数人数：低种子且未轮空者优先轮空
     let bye = null;
     let pool = sorted;
     if (sorted.length % 2 === 1) {
@@ -274,24 +287,18 @@ class TournamentService {
 
     const pairs = [];
     const remaining = [...pool];
-
     while (remaining.length > 1) {
       const a = remaining.shift();
-      const keyA = a.user_id;
-      // 1) 同分且未交手
       let idx = remaining.findIndex(
-        (b) => b.points === a.points && !playedPairs.has(this.pairKey(keyA, b.user_id))
+        (b) => b.points === a.points && !playedPairs.has(this.pairKey(a.user_id, b.user_id))
       );
-      // 2) 任意未交手
       if (idx === -1) {
-        idx = remaining.findIndex((b) => !playedPairs.has(this.pairKey(keyA, b.user_id)));
+        idx = remaining.findIndex((b) => !playedPairs.has(this.pairKey(a.user_id, b.user_id)));
       }
-      // 3) 被迫重赛
       if (idx === -1) idx = 0;
       const b = remaining.splice(idx, 1)[0];
       pairs.push([a, b]);
     }
-
     return { pairs, bye };
   }
 
@@ -299,24 +306,242 @@ class TournamentService {
     return idA < idB ? `${idA}-${idB}` : `${idB}-${idA}`;
   }
 
-  async getPlayedPairs(tournamentId) {
-    const result = await db.query(
-      `SELECT player1_id, player2_id FROM tournament_matches
-       WHERE tournament_id = $1 AND status = 'completed' AND player2_id IS NOT NULL`,
-      [tournamentId]
-    );
-    const set = new Set();
-    for (const row of result.rows) {
-      set.add(this.pairKey(row.player1_id, row.player2_id));
+  // ---- 单败淘汰 ----
+
+  async generateSingleElimRound(tournament, participants, roundNumber) {
+    const active = participants.filter((p) => !p.eliminated);
+    const playedPairs = await this.getPlayedPairs(tournament.id);
+
+    let pool = active;
+    if (roundNumber > 1) {
+      const prevWinners = await this.getRoundWinners(tournament.id, roundNumber - 1);
+      pool = prevWinners.map((id) => active.find((p) => p.user_id === id)).filter(Boolean);
     }
-    return set;
+    pool.sort((a, b) => a.seed - b.seed);
+
+    const { pairs, byes } = this.foldPairings(pool, playedPairs);
+    for (const [a, b] of pairs) {
+      await this.insertMatch(tournament.id, roundNumber, 'main', a.user_id, b.user_id);
+    }
+    for (const p of byes) {
+      await this.insertMatch(tournament.id, roundNumber, 'main', p.user_id, null, '轮空', p.user_id);
+      await this.addByeWin(tournament.id, p.user_id);
+    }
+    return { pairs: pairs.length, byes: byes.length };
+  }
+
+  async getRoundWinners(tournamentId, roundNumber) {
+    const result = await db.query(
+      `SELECT winner_id FROM tournament_matches
+       WHERE tournament_id = $1 AND round_number = $2 AND status = 'completed'
+       ORDER BY id`,
+      [tournamentId, roundNumber]
+    );
+    return result.rows.map((r) => r.winner_id);
+  }
+
+  /** 折叠配对：1 vs N、2 vs N-1，奇数时最后一个轮空 */
+  foldPairings(sorted, playedPairs = new Set()) {
+    const pairs = [];
+    const used = new Set();
+    const remaining = [...sorted];
+    while (remaining.length > 1) {
+      const a = remaining.shift();
+      let idx = remaining.findIndex((b) => !playedPairs.has(this.pairKey(a.user_id, b.user_id)));
+      if (idx === -1) idx = 0;
+      const b = remaining.splice(idx, 1)[0];
+      pairs.push([a, b]);
+      used.add(a.user_id);
+      used.add(b.user_id);
+    }
+    const byes = remaining.filter((p) => !used.has(p.user_id));
+    return { pairs, byes };
+  }
+
+  // ---- 双败淘汰 ----
+
+  async generateDoubleElimRound(tournament, participants, roundNumber) {
+    const playedPairs = await this.getPlayedPairs(tournament.id);
+    const active = participants.filter((p) => !p.eliminated);
+    const wbPlayers = active.filter((p) => p.losses === 0).sort((a, b) => a.seed - b.seed);
+    const lbPlayers = active.filter((p) => p.losses === 1).sort((a, b) => a.seed - b.seed);
+
+    let wbPool = wbPlayers;
+    if (roundNumber > 1) {
+      const prevWinners = await this.getRoundWinners(tournament.id, roundNumber - 1);
+      wbPool = prevWinners.map((id) => wbPlayers.find((p) => p.user_id === id)).filter(Boolean);
+    }
+    const { pairs: wbPairs, byes: wbByes } = this.foldPairings(wbPool, playedPairs);
+    for (const [a, b] of wbPairs) {
+      await this.insertMatch(tournament.id, roundNumber, 'wb', a.user_id, b.user_id);
+    }
+    for (const p of wbByes) {
+      await this.insertMatch(tournament.id, roundNumber, 'wb', p.user_id, null, '轮空', p.user_id);
+      await this.addByeWin(tournament.id, p.user_id);
+    }
+
+    // 败者组（从第 2 轮开始）：败者组幸存者 + 上一轮胜者组败者
+    if (roundNumber >= 2) {
+      const prevLoserIds = await this.getRoundLosers(tournament.id, roundNumber - 1);
+      const prevLoserPlayers = prevLoserIds
+        .map((id) => active.find((p) => p.user_id === id))
+        .filter(Boolean);
+      const lbPool = [...lbPlayers, ...prevLoserPlayers]
+        .filter((p) => p && !p.eliminated)
+        .sort((a, b) => a.seed - b.seed);
+      const unique = [];
+      const seen = new Set();
+      for (const p of lbPool) {
+        if (p && p.user_id && !seen.has(p.user_id)) { seen.add(p.user_id); unique.push(p); }
+      }
+      const { pairs: lbPairs, byes: lbByes } = this.foldPairings(unique, playedPairs);
+      for (const [a, b] of lbPairs) {
+        await this.insertMatch(tournament.id, roundNumber, 'lb', a.user_id, b.user_id);
+      }
+      for (const p of lbByes) {
+        await this.insertMatch(tournament.id, roundNumber, 'lb', p.user_id, null, '轮空', p.user_id);
+        await this.addByeWin(tournament.id, p.user_id);
+      }
+    }
+
+    return { wb: wbPairs.length, lb: roundNumber >= 2 ? wbPairs.length : 0 };
+  }
+
+  async getRoundLosers(tournamentId, roundNumber) {
+    const result = await db.query(
+      `SELECT tm.* FROM tournament_matches tm
+       WHERE tm.tournament_id = $1 AND tm.round_number = $2 AND tm.status = 'completed' AND tm.winner_id IS NOT NULL`,
+      [tournamentId, roundNumber]
+    );
+    return result.rows.map((m) => (m.winner_id === m.player1_id ? m.player2_id : m.player1_id));
+  }
+
+  // ---- 小组赛 ----
+
+  async generateGroupRound(tournament, participants, roundNumber) {
+    const settings = this.parseSettings(tournament);
+    const totalGroups = Math.max(1, Math.ceil(participants.length / settings.groupSize));
+    const groupRounds = participants.length % settings.groupSize === 0
+      ? settings.groupSize - 1
+      : settings.groupSize;
+
+    if (roundNumber <= groupRounds) {
+      // 小组循环赛阶段
+      let inserted = 0;
+      for (let g = 1; g <= totalGroups; g++) {
+        const groupPlayers = participants.filter((p) => p.group_number === g);
+        if (groupPlayers.length < 2) continue;
+        const schedule = this.roundRobinSchedule(groupPlayers);
+        const roundPairs = schedule[roundNumber - 1] || [];
+        for (const [a, b] of roundPairs) {
+          await this.insertMatch(tournament.id, roundNumber, `group${g}`, a.user_id, b.user_id);
+          inserted++;
+        }
+      }
+      return { groups: totalGroups, matches: inserted };
+    }
+
+    // 小组赛结束 → 淘汰赛
+    if (roundNumber === groupRounds + 1) {
+      const qualifiers = [];
+      for (let g = 1; g <= totalGroups; g++) {
+        const groupPlayers = participants.filter((p) => p.group_number === g);
+        const standings = this.groupStandings(groupPlayers);
+        const top = standings.slice(0, settings.qualifiersPerGroup);
+        for (const p of top) qualifiers.push(p);
+      }
+      const qualifierIds = new Set(qualifiers.map((p) => p.user_id));
+      // 未晋级的参赛者标记为淘汰
+      for (const p of participants) {
+        if (!qualifierIds.has(p.user_id)) {
+          await db.query(
+            `UPDATE tournament_participants SET eliminated = TRUE WHERE tournament_id = $1 AND user_id = $2`,
+            [tournament.id, p.user_id]
+          );
+        }
+      }
+      qualifiers.sort((a, b) => a.seed - b.seed);
+      const { pairs, byes } = this.foldPairings(qualifiers, new Set());
+      for (const [a, b] of pairs) {
+        await this.insertMatch(tournament.id, roundNumber, 'knockout', a.user_id, b.user_id);
+      }
+      for (const p of byes) {
+        await this.insertMatch(tournament.id, roundNumber, 'knockout', p.user_id, null, '轮空', p.user_id);
+        await this.addByeWin(tournament.id, p.user_id);
+      }
+      return { knockout: true, qualifiers: qualifiers.length };
+    }
+
+    // 淘汰赛后续轮次
+    const prevWinners = await this.getRoundWinners(tournament.id, roundNumber - 1);
+    const active = participants.filter((p) => !p.eliminated);
+    const pool = prevWinners.map((id) => active.find((p) => p.user_id === id)).filter(Boolean);
+    pool.sort((a, b) => a.seed - b.seed);
+    const { pairs, byes } = this.foldPairings(pool, new Set());
+    for (const [a, b] of pairs) {
+      await this.insertMatch(tournament.id, roundNumber, 'knockout', a.user_id, b.user_id);
+    }
+    for (const p of byes) {
+      await this.insertMatch(tournament.id, roundNumber, 'knockout', p.user_id, null, '轮空', p.user_id);
+      await this.addByeWin(tournament.id, p.user_id);
+    }
+    return { knockout: true, matches: pairs.length };
+  }
+
+  roundRobinSchedule(groupPlayers) {
+    const players = [...groupPlayers];
+    const odd = players.length % 2 === 1;
+    if (odd) players.push(null);
+    const n = players.length;
+    const rounds = [];
+    for (let r = 0; r < n - 1; r++) {
+      const pairs = [];
+      for (let i = 0; i < n / 2; i++) {
+        const a = players[i];
+        const b = players[n - 1 - i];
+        if (a && b) pairs.push([a, b]);
+      }
+      rounds.push(pairs);
+      players.splice(1, 0, players.pop());
+    }
+    return rounds;
+  }
+
+  groupStandings(groupPlayers) {
+    return [...groupPlayers].sort(
+      (a, b) => b.points - a.points || b.wins - a.wins || a.seed - b.seed
+    );
+  }
+
+  async insertMatch(tournamentId, roundNumber, bracket, p1, p2, score = null, winnerId = null) {
+    if (winnerId) {
+      await db.query(
+        `INSERT INTO tournament_matches (tournament_id, round_number, bracket, player1_id, player2_id, score, winner_id, status, finished_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', NOW(), NOW())`,
+        [tournamentId, roundNumber, bracket, p1, p2, score, winnerId]
+      );
+    } else {
+      await db.query(
+        `INSERT INTO tournament_matches (tournament_id, round_number, bracket, player1_id, player2_id, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'pending', NOW())`,
+        [tournamentId, roundNumber, bracket, p1, p2]
+      );
+    }
+  }
+
+  async addByeWin(tournamentId, userId) {
+    await db.query(
+      `UPDATE tournament_participants SET points = points + 1, wins = wins + 1, byes = byes + 1
+       WHERE tournament_id = $1 AND user_id = $2`,
+      [tournamentId, userId]
+    );
   }
 
   // ===== 比分上报 =====
 
   async reportResult(matchId, userId, score, winnerId) {
     const matchResult = await db.query(
-      `SELECT tm.*, t.status AS tournament_status, t.current_round, t.max_rounds
+      `SELECT tm.*, t.status AS tournament_status, t.current_round, t.max_rounds, t.format
        FROM tournament_matches tm
        JOIN tournaments t ON tm.tournament_id = t.id
        WHERE tm.id = $1`,
@@ -347,21 +572,38 @@ class TournamentService {
 
     const loserId = winnerId === match.player1_id ? match.player2_id : match.player1_id;
 
-    // 更新参赛者积分
     await db.query(
-      `UPDATE tournament_participants
-       SET points = points + 1, wins = wins + 1
+      `UPDATE tournament_participants SET points = points + 1, wins = wins + 1
        WHERE tournament_id = $1 AND user_id = $2`,
       [match.tournament_id, winnerId]
     );
     await db.query(
-      `UPDATE tournament_participants
-       SET losses = losses + 1
+      `UPDATE tournament_participants SET losses = losses + 1
        WHERE tournament_id = $1 AND user_id = $2`,
       [match.tournament_id, loserId]
     );
 
-    await this.recomputeBuchholz(match.tournament_id);
+    // 淘汰赛制：标记淘汰（小组循环赛阶段不淘汰）
+    const isGroupStage = match.format === 'group' && match.bracket.startsWith('group');
+    if (!isGroupStage && ['single_elim', 'double_elim', 'group'].includes(match.format)) {
+      const loserLosses = await db.query(
+        'SELECT losses FROM tournament_participants WHERE tournament_id = $1 AND user_id = $2',
+        [match.tournament_id, loserId]
+      );
+      const losses = parseInt(loserLosses.rows[0]?.losses || 0);
+      const elimThreshold = match.format === 'double_elim' ? 2 : 1;
+      if (losses >= elimThreshold) {
+        await db.query(
+          `UPDATE tournament_participants SET eliminated = TRUE
+           WHERE tournament_id = $1 AND user_id = $2`,
+          [match.tournament_id, loserId]
+        );
+      }
+    }
+
+    if (match.format !== 'swiss') {
+      await this.recomputeBuchholz(match.tournament_id);
+    }
 
     this.emitUpdate(match.tournament_id, 'tournament:match_updated', {
       tournamentId: match.tournament_id,
@@ -369,7 +611,7 @@ class TournamentService {
       round: match.round_number,
     });
 
-    // 检查本轮是否全部完成 → 自动开始下一轮或结束赛事
+    // 检查本轮是否全部完成 → 自动开始下一轮或结束
     const pendingCount = await db.query(
       `SELECT COUNT(*) AS count FROM tournament_matches
        WHERE tournament_id = $1 AND round_number = $2 AND status = 'pending'`,
@@ -377,29 +619,47 @@ class TournamentService {
     );
 
     if (parseInt(pendingCount.rows[0].count) === 0) {
+      // 淘汰赛：仅剩 1 人直接结束（小组赛在淘汰赛阶段同样适用）
+      if (['single_elim', 'double_elim', 'group'].includes(match.format)) {
+        const inGroupStage = match.format === 'group' && match.bracket.startsWith('group');
+        if (!inGroupStage) {
+          const alive = await db.query(
+            'SELECT COUNT(*) AS count FROM tournament_participants WHERE tournament_id = $1 AND eliminated = FALSE',
+            [match.tournament_id]
+          );
+          const aliveCount = parseInt(alive.rows[0].count);
+          if (aliveCount <= 1 || (match.format === 'double_elim' && aliveCount <= 2)) {
+            await db.query(
+              `UPDATE tournaments SET status = 'completed', finished_at = NOW() WHERE id = $1`,
+              [match.tournament_id]
+            );
+            this.emitUpdate(match.tournament_id, 'tournament:completed', { tournamentId: match.tournament_id });
+            return { success: true, message: '比分已上报，冠军已产生，赛事已结束并留档', tournamentCompleted: true };
+          }
+        }
+      }
+
       if (match.round_number >= match.max_rounds) {
         await db.query(
           `UPDATE tournaments SET status = 'completed', finished_at = NOW() WHERE id = $1`,
           [match.tournament_id]
         );
-        this.emitUpdate(match.tournament_id, 'tournament:completed', {
-          tournamentId: match.tournament_id,
-        });
+        this.emitUpdate(match.tournament_id, 'tournament:completed', { tournamentId: match.tournament_id });
         return { success: true, message: '比分已上报，赛事全部轮次结束，已留档', tournamentCompleted: true };
-      } else {
-        const nextRound = match.round_number + 1;
-        await db.query(
-          'UPDATE tournaments SET current_round = $1 WHERE id = $2',
-          [nextRound, match.tournament_id]
-        );
-        await this.generateRound(match.tournament_id, nextRound);
-        this.emitUpdate(match.tournament_id, 'tournament:round_started', {
-          tournamentId: match.tournament_id,
-          round: nextRound,
-          autoStarted: true,
-        });
-        return { success: true, message: `比分已上报，第 ${nextRound} 轮已自动生成`, autoStarted: true };
       }
+
+      const nextRound = match.round_number + 1;
+      await db.query(
+        'UPDATE tournaments SET current_round = $1 WHERE id = $2',
+        [nextRound, match.tournament_id]
+      );
+      await this.generateRound(match.tournament_id, nextRound);
+      this.emitUpdate(match.tournament_id, 'tournament:round_started', {
+        tournamentId: match.tournament_id,
+        round: nextRound,
+        autoStarted: true,
+      });
+      return { success: true, message: `比分已上报，第 ${nextRound} 轮已自动生成`, autoStarted: true };
     }
 
     return { success: true, message: '比分已上报' };
@@ -408,18 +668,36 @@ class TournamentService {
   // ===== 排名 =====
 
   async getStandings(tournamentId) {
+    const tournament = await this.getTournament(tournamentId);
     await this.recomputeBuchholz(tournamentId);
     const result = await db.query(
-      `SELECT tp.user_id, tp.seed, tp.points, tp.wins, tp.losses, tp.byes, tp.buchholz,
+      `SELECT tp.user_id, tp.seed, tp.points, tp.wins, tp.losses, tp.byes, tp.buchholz, tp.group_number, tp.eliminated,
               u.username, u.game_id
        FROM tournament_participants tp
        JOIN users u ON tp.user_id = u.id
        WHERE tp.tournament_id = $1
-       ORDER BY tp.points DESC, tp.buchholz DESC, tp.wins DESC, tp.seed`,
+       ORDER BY tp.group_number, tp.points DESC, tp.buchholz DESC, tp.wins DESC, tp.seed`,
       [tournamentId]
     );
-    return result.rows.map((r, i) => ({
-      rank: i + 1,
+
+    const rows = result.rows;
+    const ranked = [];
+    if (tournament?.format === 'group') {
+      const groups = {};
+      for (const r of rows) {
+        if (!groups[r.group_number]) groups[r.group_number] = [];
+        groups[r.group_number].push(r);
+      }
+      for (const g of Object.keys(groups).sort((a, b) => a - b)) {
+        groups[g].forEach((r, i) => ranked.push({ ...r, rank: i + 1, groupRank: i + 1 }));
+      }
+    } else {
+      rows.forEach((r, i) => ranked.push({ ...r, rank: i + 1 }));
+    }
+
+    return ranked.map((r) => ({
+      rank: r.rank,
+      groupRank: r.groupRank || null,
       userId: r.user_id,
       seed: r.seed,
       username: r.username,
@@ -429,12 +707,11 @@ class TournamentService {
       losses: r.losses,
       byes: r.byes,
       buchholz: r.buchholz,
+      groupNumber: r.group_number,
+      eliminated: r.eliminated,
     }));
   }
 
-  /**
-   * 计算瑞士轮辅助排名分（Buchholz：所有已交手对手的积分之和）
-   */
   async recomputeBuchholz(tournamentId) {
     const participants = await this.getParticipants(tournamentId);
     const matches = await this.getMatches(tournamentId);
@@ -458,6 +735,19 @@ class TournamentService {
         [buchholzMap[userId], tournamentId, parseInt(userId)]
       );
     }
+  }
+
+  async getPlayedPairs(tournamentId) {
+    const result = await db.query(
+      `SELECT player1_id, player2_id FROM tournament_matches
+       WHERE tournament_id = $1 AND status = 'completed' AND player2_id IS NOT NULL`,
+      [tournamentId]
+    );
+    const set = new Set();
+    for (const row of result.rows) {
+      set.add(this.pairKey(row.player1_id, row.player2_id));
+    }
+    return set;
   }
 
   // ===== 结束 / 归档 =====

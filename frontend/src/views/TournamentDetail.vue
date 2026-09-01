@@ -8,8 +8,11 @@
       <!-- 头部 -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 flex-wrap">
             <h1 class="text-2xl font-bold text-white">{{ tournament.name }}</h1>
+            <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-600/20 text-primary-300 border border-primary-600/40">
+              {{ formatName(tournament.format) }}
+            </span>
             <span class="px-2.5 py-1 rounded-full text-xs font-semibold" :class="statusClass(tournament.status)">
               {{ statusText(tournament.status) }}
             </span>
@@ -17,7 +20,7 @@
           <p v-if="tournament.description" class="text-sm text-dark-400 mt-1">{{ tournament.description }}</p>
           <p class="text-xs text-dark-500 mt-1">
             创建者：{{ tournament.creator_username }} ｜ 当前第 {{ tournament.current_round }}/{{ tournament.max_rounds }} 轮 ｜
-            {{ participants.length }} 人参赛
+            {{ participants.length }} 人参赛 ｜ {{ settingsText }}
           </p>
         </div>
 
@@ -67,18 +70,22 @@
       <div class="bg-dark-800 rounded-xl border border-dark-700 overflow-hidden mb-8">
         <div class="px-5 py-4 border-b border-dark-700 flex items-center justify-between">
           <h2 class="font-bold text-white">积分榜</h2>
-          <span class="text-xs text-dark-500">积分 = 胜场数；同分按 Buchholz（对手分）排序</span>
+          <span class="text-xs text-dark-500">
+            {{ tournament.format === 'group' ? '小组赛按组内排名；淘汰赛阶段按积分排序' : '积分 = 胜场数；同分按 Buchholz（对手分）排序' }}
+          </span>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
               <tr class="bg-dark-900/60 text-dark-400 text-left">
                 <th class="px-4 py-3 font-medium">名次</th>
+                <th v-if="tournament.format === 'group'" class="px-4 py-3 font-medium">小组</th>
                 <th class="px-4 py-3 font-medium">玩家</th>
                 <th class="px-4 py-3 font-medium text-center">积分</th>
                 <th class="px-4 py-3 font-medium text-center">胜/负</th>
                 <th class="px-4 py-3 font-medium text-center">轮空</th>
                 <th class="px-4 py-3 font-medium text-center">对手分</th>
+                <th v-if="['single_elim','double_elim','group'].includes(tournament.format)" class="px-4 py-3 font-medium text-center">状态</th>
               </tr>
             </thead>
             <tbody>
@@ -92,6 +99,9 @@
                   <span class="inline-flex w-7 h-7 items-center justify-center rounded-full text-xs font-bold"
                     :class="rankClass(p.rank)">{{ p.rank }}</span>
                 </td>
+                <td v-if="tournament.format === 'group'" class="px-4 py-3">
+                  <span class="px-2 py-0.5 rounded-md text-xs bg-dark-700 text-dark-200">第 {{ p.groupNumber }} 组</span>
+                </td>
                 <td class="px-4 py-3">
                   <span class="font-semibold text-white">{{ p.username }}</span>
                   <span class="text-xs text-dark-500 ml-2">{{ p.gameId }}</span>
@@ -104,6 +114,10 @@
                 </td>
                 <td class="px-4 py-3 text-center text-dark-400">{{ p.byes }}</td>
                 <td class="px-4 py-3 text-center text-dark-300">{{ p.buchholz }}</td>
+                <td v-if="['single_elim','double_elim','group'].includes(tournament.format)" class="px-4 py-3 text-center">
+                  <span v-if="p.eliminated" class="px-2 py-0.5 rounded-full text-xs bg-red-600/20 text-red-400 border border-red-600/40">已淘汰</span>
+                  <span v-else class="px-2 py-0.5 rounded-full text-xs bg-green-600/20 text-green-400 border border-green-600/40">晋级中</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -134,6 +148,13 @@
             :key="m.id"
             class="bg-dark-800 rounded-lg border border-dark-700 p-4"
           >
+            <!-- 赛区标签 -->
+            <div v-if="bracketLabel(m.bracket)" class="flex items-center gap-2 mb-2">
+              <span class="px-2 py-0.5 rounded-md text-xs font-semibold" :class="bracketClass(m.bracket)">
+                {{ bracketLabel(m.bracket) }}
+              </span>
+              <span v-if="m.player1_username && m.player2_username" class="text-xs text-dark-500">对局 #{{ m.id }}</span>
+            </div>
             <!-- 已完成 / 轮空 -->
             <div v-if="m.status === 'completed'" class="flex items-center justify-between gap-4">
               <div class="flex items-center gap-3 flex-wrap">
@@ -237,6 +258,37 @@ function rankClass(rank) {
   if (rank === 2) return 'bg-gray-300 text-dark-900'
   if (rank === 3) return 'bg-amber-700 text-white'
   return 'bg-dark-700 text-dark-300'
+}
+
+function formatName(f) {
+  return { swiss: '瑞士轮', group: '小组赛+淘汰赛', single_elim: '单败淘汰', double_elim: '双败淘汰' }[f] || f
+}
+
+const settingsText = computed(() => {
+  if (!tournament.value) return ''
+  const parts = [`Bo${tournament.value.settings?.bestOf || 3}`]
+  if (tournament.value.format === 'group') {
+    parts.push(`每组${tournament.value.settings?.groupSize || 4}人`)
+    parts.push(`每组前${tournament.value.settings?.qualifiersPerGroup || 2}晋级`)
+  }
+  return parts.join(' ｜ ')
+})
+
+function bracketLabel(b) {
+  if (!b || b === 'main') return ''
+  if (b === 'wb') return '胜者组'
+  if (b === 'lb') return '败者组'
+  if (b === 'knockout') return '淘汰赛'
+  if (b.startsWith('group')) return `第${b.replace('group', '')}组`
+  return ''
+}
+
+function bracketClass(b) {
+  if (b === 'wb') return 'bg-blue-600/20 text-blue-300 border border-blue-600/40'
+  if (b === 'lb') return 'bg-red-600/20 text-red-300 border border-red-600/40'
+  if (b === 'knockout') return 'bg-green-600/20 text-green-300 border border-green-600/40'
+  if (b && b.startsWith('group')) return 'bg-purple-600/20 text-purple-300 border border-purple-600/40'
+  return ''
 }
 
 function formatDateTime(d) {

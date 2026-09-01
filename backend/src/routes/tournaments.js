@@ -71,8 +71,8 @@ router.get('/:id/standings', async (req, res) => {
 // 创建赛事
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { name, description, maxRounds } = req.body;
-    const result = await getTournamentService().createTournament(name, description, maxRounds, req.user.id);
+    const { name, description, maxRounds, format, settings } = req.body;
+    const result = await getTournamentService().createTournament(name, description, format, maxRounds, settings, req.user.id);
     if (!result.success) return res.status(400).json({ error: result.message });
     res.status(201).json(result);
   } catch (err) {

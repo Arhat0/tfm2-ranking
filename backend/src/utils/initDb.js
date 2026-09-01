@@ -71,7 +71,26 @@ async function initDatabase() {
       }
       console.log(`英雄列表初始化完成：${HEROES.length} 个职业`);
     } else {
-      console.log('英雄列表已存在，跳过初始化');
+      // 已有数据：同步中英文名与定位（幂等，用于修正旧数据）
+      let synced = 0;
+      for (const h of HEROES) {
+        const r = await db.query(
+          `UPDATE heroes SET name_en = $1, name_zh = $2, category = $3 WHERE key = $4 AND (name_en IS DISTINCT FROM $1 OR name_zh IS DISTINCT FROM $2 OR category IS DISTINCT FROM $3)`,
+          [h.name_en, h.name_zh, h.category, h.key]
+        );
+        synced += r.rowCount || 0;
+      }
+      for (const h of HEROES) {
+        const exists = await db.query('SELECT 1 FROM heroes WHERE key = $1', [h.key]);
+        if (exists.rows.length === 0) {
+          await db.query(
+            `INSERT INTO heroes (key, name_en, name_zh, category) VALUES ($1, $2, $3, $4)`,
+            [h.key, h.name_en, h.name_zh, h.category]
+          );
+          synced++;
+        }
+      }
+      console.log(`英雄列表已存在，同步修正 ${synced} 条记录`);
     }
 
     console.log('数据库初始化完成！');

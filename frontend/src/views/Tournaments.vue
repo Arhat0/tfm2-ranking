@@ -27,15 +27,63 @@
           />
         </div>
         <div>
-          <label class="block text-xs text-dark-400 mb-1">轮数（1-10）</label>
+          <label class="block text-xs text-dark-400 mb-1">赛制</label>
+          <select
+            v-model="createForm.format"
+            class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+          >
+            <option value="swiss">瑞士轮</option>
+            <option value="group">小组赛 + 淘汰赛</option>
+            <option value="single_elim">单败淘汰</option>
+            <option value="double_elim">双败淘汰</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-dark-400 mb-1">每局赛制（Bo）</label>
+          <select
+            v-model.number="createForm.settings.bestOf"
+            class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+          >
+            <option :value="1">Bo1</option>
+            <option :value="3">Bo3</option>
+            <option :value="5">Bo5</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-dark-400 mb-1">轮数（1-12）</label>
           <input
             v-model.number="createForm.maxRounds"
             type="number"
             min="1"
-            max="10"
+            max="12"
             class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
           />
         </div>
+
+        <!-- 小组赛专属设置 -->
+        <template v-if="createForm.format === 'group'">
+          <div>
+            <label class="block text-xs text-dark-400 mb-1">每组人数</label>
+            <input
+              v-model.number="createForm.settings.groupSize"
+              type="number"
+              min="2"
+              max="8"
+              class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-dark-400 mb-1">每组晋级数（进淘汰赛）</label>
+            <input
+              v-model.number="createForm.settings.qualifiersPerGroup"
+              type="number"
+              min="1"
+              max="3"
+              class="w-full px-4 py-2 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+            />
+          </div>
+        </template>
+
         <div class="sm:col-span-3">
           <label class="block text-xs text-dark-400 mb-1">赛事说明</label>
           <textarea
@@ -46,6 +94,9 @@
           ></textarea>
         </div>
       </div>
+      <p class="text-xs text-dark-500 mt-2">
+        {{ formatHint }}
+      </p>
       <button
         @click="handleCreate"
         :disabled="creating"
@@ -71,6 +122,9 @@
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <h3 class="font-bold text-white truncate group-hover:text-primary-300">{{ t.name }}</h3>
+              <span class="shrink-0 px-2 py-0.5 rounded-full text-xs bg-primary-600/20 text-primary-300 border border-primary-600/40">
+                {{ formatNames[t.format] || t.format }}
+              </span>
               <span class="shrink-0 px-2 py-0.5 rounded-full text-xs" :class="statusClass(t.status)">
                 {{ statusText(t.status) }}
               </span>
@@ -96,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { tournamentApi } from '../api'
 import { useToastStore } from '../stores/toast'
@@ -107,7 +161,29 @@ const toastStore = useToastStore()
 const tournaments = ref([])
 const showCreate = ref(false)
 const creating = ref(false)
-const createForm = ref({ name: '', description: '', maxRounds: 5 })
+const createForm = ref({
+  name: '',
+  description: '',
+  maxRounds: 5,
+  format: 'swiss',
+  settings: { bestOf: 3, groupSize: 4, qualifiersPerGroup: 2 },
+})
+
+const formatNames = {
+  swiss: '瑞士轮',
+  group: '小组赛+淘汰赛',
+  single_elim: '单败淘汰',
+  double_elim: '双败淘汰',
+}
+
+const formatHint = computed(() => {
+  const f = createForm.value.format
+  if (f === 'swiss') return '瑞士轮：同分优先配对、避免重复交手，按积分+对手分排名，适合循环交流赛'
+  if (f === 'group') return `小组赛：按种子均分小组，组内循环赛，每组前 ${createForm.value.settings.qualifiersPerGroup} 名晋级单败淘汰赛`
+  if (f === 'single_elim') return '单败淘汰：按种子生成对阵表，输一场即淘汰，直至决出冠军'
+  if (f === 'double_elim') return '双败淘汰：胜者组+败者组，输两场才淘汰，冠军与败者组冠军决赛'
+  return ''
+})
 
 function statusText(s) {
   return { registration: '报名中', in_progress: '进行中', completed: '已结束' }[s] || s
@@ -145,7 +221,13 @@ async function handleCreate() {
     const res = await tournamentApi.create(createForm.value)
     toastStore.success('赛事创建成功')
     showCreate.value = false
-    createForm.value = { name: '', description: '', maxRounds: 5 }
+    createForm.value = {
+      name: '',
+      description: '',
+      maxRounds: 5,
+      format: 'swiss',
+      settings: { bestOf: 3, groupSize: 4, qualifiersPerGroup: 2 },
+    }
     router.push(`/tournaments/${res.data.tournamentId}`)
   } catch (err) {
     toastStore.error(err.response?.data?.error || '创建失败')

@@ -59,9 +59,9 @@
         </div>
 
         <div class="bg-primary-900/30 border border-primary-700 rounded-lg p-4 mb-6">
-          <div class="text-sm text-primary-300 mb-1">房间密码</div>
+          <div class="text-sm text-primary-300 mb-1">房间标题（房名）</div>
           <div class="text-3xl font-bold text-primary-400 tracking-widest">{{ matchedData.roomPassword }}</div>
-          <div class="text-xs text-dark-400 mt-2">请在游戏内使用此密码创建/加入房间</div>
+          <div class="text-xs text-dark-400 mt-2">请在游戏内使用此标题创建房间，对手在房间列表中找到并加入</div>
         </div>
 
         <div class="space-y-3">
@@ -140,7 +140,7 @@
             <span class="text-sm text-dark-300">匹配成功后自动打开游戏（steam://）</span>
           </label>
           <p class="text-xs text-dark-500">
-            勾选后，匹配成功时将自动通过 Steam 启动 Teamfight Manager 2，并支持一键复制房间密码、下载自动建房辅助脚本
+            勾选后，匹配成功时将自动通过 Steam 启动 Teamfight Manager 2（需已登录 Steam），并支持一键复制房名、下载自动建房辅助脚本
           </p>
         </div>
 
@@ -203,7 +203,7 @@ async function copyPassword() {
   try {
     await navigator.clipboard.writeText(pw)
     copied.value = true
-    toastStore.success('房间密码已复制')
+    toastStore.success('房间标题已复制')
     setTimeout(() => (copied.value = false), 2000)
   } catch (err) {
     toastStore.error('复制失败，请手动复制')
@@ -221,21 +221,21 @@ function downloadAutoFillScript() {
   a.download = 'tfm2_auto_join.ps1'
   a.click()
   URL.revokeObjectURL(url)
-  toastStore.info('辅助脚本已下载，游戏内进入建房界面后运行它即可自动输入密码')
+  toastStore.info('辅助脚本已下载，游戏内进入建房界面后运行它即可自动输入房名')
 }
 
-function generateAutoFillScript(password) {
+function generateAutoFillScript(roomTitle) {
   return `# TFM2 自动建房辅助脚本
 # 使用说明：
-# 1. 点击本网站"打开游戏"按钮启动 Teamfight Manager 2
-# 2. 在游戏内进入"创建房间"界面（停留在此界面）
-# 3. 双击运行本脚本，5 秒内切回游戏窗口，脚本会自动输入房间密码
+# 1. 点击本网站"打开游戏"按钮启动 Teamfight Manager 2（需已登录 Steam）
+# 2. 在游戏大厅进入"创建房间"界面（停留在此界面）
+# 3. 双击运行本脚本，5 秒内切回游戏窗口，脚本会自动输入房间标题
 # 4. 输入完成后手动点击确认创建房间
 
-$password = '${password}'
+$roomTitle = '${roomTitle}'
 Write-Host 'TFM2 自动建房辅助脚本'
-Write-Host '房间密码: ' $password
-Write-Host '请在游戏内停留在创建房间界面，5 秒后自动输入密码...'
+Write-Host '房间标题: ' $roomTitle
+Write-Host '请在游戏内停留在创建房间界面，5 秒后自动输入标题...'
 Start-Sleep -Seconds 5
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -249,7 +249,7 @@ try {
 }
 
 Start-Sleep -Milliseconds 1000
-[System.Windows.Forms.SendKeys]::SendWait($password)
+[System.Windows.Forms.SendKeys]::SendWait($roomTitle)
 Write-Host '密码已输入完毕，请手动确认创建房间'
 Start-Sleep -Seconds 2
 `
