@@ -212,13 +212,13 @@
               <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
                 <div v-for="(slot, i) in myPicks" :key="'mp' + i" class="bg-dark-800 rounded-lg p-2.5 border border-dark-700">
                   <div class="text-xs text-dark-400 mb-1.5">选人 {{ i + 1 }}</div>
-                  <select
-                    v-model="myPicks[i].heroId"
-                    class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
-                  >
-                    <option :value="0">— 未选择 —</option>
-                    <option v-for="h in heroes" :key="h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
-                  </select>
+                  <HeroPicker
+                    :model-value="myPicks[i].heroId"
+                    :heroes="heroes"
+                    :heroes-loading="heroesLoading"
+                    @update:model-value="myPicks[i].heroId = $event"
+                    @retry="loadHeroes"
+                  />
                   <div class="flex gap-1.5 mt-1.5">
                     <input
                       v-model.number="myPicks[i].damageDealt"
@@ -239,15 +239,17 @@
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs text-dark-400 shrink-0">禁用：</span>
-                <select
+                <HeroPicker
                   v-for="(b, i) in myBans"
                   :key="'mb' + i"
-                  v-model="myBans[i]"
-                  class="flex-1 px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
-                >
-                  <option :value="0">— 未选择 —</option>
-                  <option v-for="h in heroes" :key="'mbo' + h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
-                </select>
+                  :model-value="myBans[i]"
+                  :heroes="heroes"
+                  :heroes-loading="heroesLoading"
+                  placeholder="— 选择禁用 —"
+                  @update:model-value="myBans[i] = $event"
+                  @retry="loadHeroes"
+                  class="flex-1"
+                />
               </div>
             </div>
 
@@ -257,13 +259,13 @@
               <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
                 <div v-for="(slot, i) in oppPicks" :key="'op' + i" class="bg-dark-800 rounded-lg p-2.5 border border-dark-700">
                   <div class="text-xs text-dark-400 mb-1.5">选人 {{ i + 1 }}</div>
-                  <select
-                    v-model="oppPicks[i].heroId"
-                    class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
-                  >
-                    <option :value="0">— 未选择 —</option>
-                    <option v-for="h in heroes" :key="h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
-                  </select>
+                  <HeroPicker
+                    :model-value="oppPicks[i].heroId"
+                    :heroes="heroes"
+                    :heroes-loading="heroesLoading"
+                    @update:model-value="oppPicks[i].heroId = $event"
+                    @retry="loadHeroes"
+                  />
                   <div class="flex gap-1.5 mt-1.5">
                     <input
                       v-model.number="oppPicks[i].damageDealt"
@@ -284,19 +286,21 @@
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs text-dark-400 shrink-0">禁用：</span>
-                <select
+                <HeroPicker
                   v-for="(b, i) in oppBans"
                   :key="'ob' + i"
-                  v-model="oppBans[i]"
-                  class="flex-1 px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white focus:outline-none"
-                >
-                  <option :value="0">— 未选择 —</option>
-                  <option v-for="h in heroes" :key="'obo' + h.id" :value="h.id">{{ h.nameZh || h.nameEn }}</option>
-                </select>
+                  :model-value="oppBans[i]"
+                  :heroes="heroes"
+                  :heroes-loading="heroesLoading"
+                  placeholder="— 选择禁用 —"
+                  @update:model-value="oppBans[i] = $event"
+                  @retry="loadHeroes"
+                  class="flex-1"
+                />
               </div>
             </div>
 
-            <p class="text-xs text-dark-500">伤害数据可在游戏结算界面查看；每队可上报 5 名上场英雄与 3 个禁用英雄</p>
+            <p class="text-xs text-dark-500">伤害数据可在游戏结算界面查看；每队可上报 5 名上场英雄与禁用英雄（禁用数可调整）</p>
           </div>
         </div>
 
@@ -503,6 +507,7 @@ import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
 import { heroStatsApi, matchApi } from '../api'
 import UserAvatar from '../components/UserAvatar.vue'
+import HeroPicker from '../components/HeroPicker.vue'
 import { createWorker } from 'tesseract.js'
 
 const router = useRouter()
@@ -666,12 +671,25 @@ const cancelling = ref(false)
 
 // 英雄 BP 上报状态
 const heroes = ref([])
+const heroesLoading = ref(false)
 const showHeroForm = ref(false)
 const myPicks = ref([])
 const myBans = ref([])
 const oppPicks = ref([])
 const oppBans = ref([])
 const banCount = ref(parseInt(localStorage.getItem('tfm2_ban_count')) || 3)
+
+async function loadHeroes() {
+  heroesLoading.value = true
+  try {
+    const res = await heroStatsApi.list()
+    heroes.value = res.data.heroes
+  } catch (err) {
+    // 静默失败，HeroPicker 中提供重试
+  } finally {
+    heroesLoading.value = false
+  }
+}
 
 function emptySlot() {
   return { heroId: 0, damageDealt: null, damageTaken: null }
@@ -905,12 +923,7 @@ onMounted(async () => {
   setupSocketListeners()
   initHeroForm()
   // 加载英雄列表（用于 BP 上报选择）
-  try {
-    const res = await heroStatsApi.list()
-    heroes.value = res.data.heroes
-  } catch (err) {
-    // 静默失败，不影响比分上报
-  }
+  loadHeroes()
 
   // 后台预热 OCR 引擎（下载 wasm/语言包），点击识别时不再等待
   getOcrWorker().catch(() => {})

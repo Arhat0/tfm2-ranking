@@ -12,7 +12,14 @@ class HeroStatsService {
     const result = await db.query(
       'SELECT id, key, name_en, name_zh, category FROM heroes ORDER BY id'
     );
-    return result.rows;
+    // 统一输出驼峰字段（前端使用 nameZh/nameEn）
+    return result.rows.map((r) => ({
+      id: r.id,
+      key: r.key,
+      nameEn: r.name_en,
+      nameZh: r.name_zh,
+      category: r.category,
+    }));
   }
 
   /**
