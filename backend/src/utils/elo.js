@@ -9,13 +9,22 @@ function getKFactor(score) {
   return 16;
 }
 
+// 比分差距系数：小分差距越大，积分变化越大
+function getScoreMultiplier(winnerScore, loserScore) {
+  if (winnerScore == null || loserScore == null) return 1.0;
+  const diff = Math.abs(winnerScore - loserScore);
+  if (diff >= 3) return 1.3;  // 3:0
+  if (diff === 2) return 1.2;  // 2:0 或 3:1
+  return 1.0;                   // 2:1 或 3:2
+}
+
 // 计算预期胜率
 function expectedScore(playerA, playerB) {
   return 1 / (1 + Math.pow(10, (playerB - playerA) / 400));
 }
 
-// 计算双方分数变化
-function calculateElo(playerAScore, playerBScore, winnerIsA) {
+// 计算双方分数变化（支持比分差距影响）
+function calculateElo(playerAScore, playerBScore, winnerIsA, winnerGameScore = null, loserGameScore = null) {
   const kA = getKFactor(playerAScore);
   const kB = getKFactor(playerBScore);
 
@@ -25,8 +34,11 @@ function calculateElo(playerAScore, playerBScore, winnerIsA) {
   const actualA = winnerIsA ? 1 : 0;
   const actualB = winnerIsA ? 0 : 1;
 
-  const changeA = Math.round(kA * (actualA - expectedA));
-  const changeB = Math.round(kB * (actualB - expectedB));
+  // 比分差距系数
+  const multiplier = getScoreMultiplier(winnerGameScore, loserGameScore);
+
+  const changeA = Math.round(kA * (actualA - expectedA) * multiplier);
+  const changeB = Math.round(kB * (actualB - expectedB) * multiplier);
 
   return {
     playerA: {
@@ -39,6 +51,7 @@ function calculateElo(playerAScore, playerBScore, winnerIsA) {
       after: Math.max(0, playerBScore + changeB),
       change: changeB,
     },
+    multiplier,
   };
 }
 

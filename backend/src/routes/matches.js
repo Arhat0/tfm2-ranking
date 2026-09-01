@@ -192,7 +192,7 @@ router.get('/public/recent', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
 
     const result = await db.query(
-      `SELECT m.id, m.status, m.result, m.winner_id, m.finished_at,
+      `SELECT m.id, m.status, m.result, m.winner_id, m.player1_id, m.player2_id, m.finished_at,
               u1.username as player1_username, u1.game_id as player1_game_id,
               u2.username as player2_username, u2.game_id as player2_game_id,
               rh1.change as player1_score_change,

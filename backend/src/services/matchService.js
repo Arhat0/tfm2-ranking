@@ -162,8 +162,32 @@ class MatchService {
           throw new Error('玩家档案不存在');
         }
 
-        // 计算 Elo
-        const eloResult = calculateElo(winnerProfile.rank_score, loserProfile.rank_score, true);
+        // 解析比分，用于小分影响
+        const matchResult = typeof match.result === 'string' ? JSON.parse(match.result) : match.result;
+        let winnerGameScore = null;
+        let loserGameScore = null;
+        if (matchResult?.score && matchResult.score.includes(':')) {
+          const parts = matchResult.score.split(':').map(Number);
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            // 判断胜者是 player1 还是 player2，对应比分位置
+            if (winnerId === match.player1_id) {
+              winnerGameScore = parts[0];
+              loserGameScore = parts[1];
+            } else {
+              winnerGameScore = parts[1];
+              loserGameScore = parts[0];
+            }
+          }
+        }
+
+        // 计算 Elo（含比分差距影响）
+        const eloResult = calculateElo(
+          winnerProfile.rank_score,
+          loserProfile.rank_score,
+          true,
+          winnerGameScore,
+          loserGameScore
+        );
 
         // 更新胜者
         const newWinnerStreak = winnerProfile.win_streak + 1;

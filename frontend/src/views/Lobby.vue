@@ -138,7 +138,8 @@
         <div
           v-for="match in recentAllMatches"
           :key="match.id"
-          class="flex items-center justify-between p-3 bg-dark-900 rounded-lg"
+          class="flex items-center justify-between p-3 bg-dark-900 rounded-lg cursor-pointer hover:bg-dark-700/50 transition-colors"
+          @click="selectedMatch = match"
         >
           <div class="flex items-center gap-3 flex-1 min-w-0">
             <!-- 玩家1 -->
@@ -249,6 +250,94 @@
         </div>
       </div>
     </div>
+
+    <!-- 对局详情弹窗 -->
+    <div v-if="selectedMatch" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" @click.self="selectedMatch = null">
+      <div class="bg-dark-800 rounded-xl p-6 w-full max-w-lg border border-dark-700">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-bold text-white">对局详情</h3>
+          <button @click="selectedMatch = null" class="text-dark-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- 双方信息 -->
+        <div class="flex items-center justify-between mb-6">
+          <!-- 玩家1 -->
+          <div class="text-center flex-1">
+            <div
+              class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-2"
+              :class="selectedMatch.player1.isWinner ? 'bg-green-600/20' : 'bg-dark-700'"
+            >
+              <span class="text-xl font-bold" :class="selectedMatch.player1.isWinner ? 'text-green-400' : 'text-white'">
+                {{ selectedMatch.player1.gameId?.charAt(0) || '?' }}
+              </span>
+            </div>
+            <div class="font-semibold" :class="selectedMatch.player1.isWinner ? 'text-green-400' : 'text-white'">
+              {{ selectedMatch.player1.gameId }}
+              <span v-if="selectedMatch.player1.isWinner" class="text-xs ml-1">胜</span>
+            </div>
+            <div class="text-xs text-dark-500">{{ selectedMatch.player1.username }}</div>
+            <div class="text-sm mt-1" :class="selectedMatch.player1.scoreChange >= 0 ? 'text-green-400' : 'text-red-400'">
+              {{ selectedMatch.player1.scoreChange >= 0 ? '+' : '' }}{{ selectedMatch.player1.scoreChange }}
+            </div>
+          </div>
+
+          <!-- 比分 -->
+          <div class="px-4 text-center">
+            <div class="text-3xl font-bold text-white">{{ selectedMatch.score || 'VS' }}</div>
+            <div class="text-xs text-dark-500 mt-1">对局 #{{ selectedMatch.id }}</div>
+          </div>
+
+          <!-- 玩家2 -->
+          <div class="text-center flex-1">
+            <div
+              class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-2"
+              :class="selectedMatch.player2.isWinner ? 'bg-green-600/20' : 'bg-dark-700'"
+            >
+              <span class="text-xl font-bold" :class="selectedMatch.player2.isWinner ? 'text-green-400' : 'text-white'">
+                {{ selectedMatch.player2.gameId?.charAt(0) || '?' }}
+              </span>
+            </div>
+            <div class="font-semibold" :class="selectedMatch.player2.isWinner ? 'text-green-400' : 'text-white'">
+              <span v-if="selectedMatch.player2.isWinner" class="text-xs mr-1">胜</span>
+              {{ selectedMatch.player2.gameId }}
+            </div>
+            <div class="text-xs text-dark-500">{{ selectedMatch.player2.username }}</div>
+            <div class="text-sm mt-1" :class="selectedMatch.player2.scoreChange >= 0 ? 'text-green-400' : 'text-red-400'">
+              {{ selectedMatch.player2.scoreChange >= 0 ? '+' : '' }}{{ selectedMatch.player2.scoreChange }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 详细信息 -->
+        <div class="bg-dark-900 rounded-lg p-4 space-y-2">
+          <div class="flex justify-between text-sm">
+            <span class="text-dark-400">对局状态</span>
+            <span class="text-white">已完成</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-dark-400">结束时间</span>
+            <span class="text-white">{{ formatDateTime(selectedMatch.finishedAt) }}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-dark-400">胜者</span>
+            <span class="text-green-400">
+              {{ selectedMatch.player1.isWinner ? selectedMatch.player1.gameId : selectedMatch.player2.gameId }}
+            </span>
+          </div>
+        </div>
+
+        <button
+          @click="selectedMatch = null"
+          class="w-full mt-6 px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+        >
+          关闭
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -271,6 +360,7 @@ const currentMatch = computed(() => matchStore.currentMatch)
 const recentMatches = ref([])
 const recentAllMatches = ref([])
 const loadingRecent = ref(false)
+const selectedMatch = ref(null)
 
 // 编辑资料
 const showEditModal = ref(false)
@@ -336,6 +426,12 @@ function formatDate(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 async function loadRecentMatches() {
