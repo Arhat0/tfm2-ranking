@@ -47,6 +47,12 @@
               开赛并抽签
             </button>
             <button
+              @click="showSettings = !showSettings"
+              class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              ⚙️ 流程编辑
+            </button>
+            <button
               v-if="tournament.status === 'in_progress' && tournament.current_round < tournament.max_rounds"
               @click="handleNextRound"
               :disabled="acting"
@@ -63,6 +69,67 @@
               结束赛事
             </button>
           </template>
+        </div>
+      </div>
+
+      <!-- ⚙️ 流程编辑面板（组织者） -->
+      <div v-if="canManage && showSettings" class="bg-dark-800 rounded-xl border border-purple-700/40 p-5 mb-6">
+        <h3 class="font-bold text-white mb-4">⚙️ 比赛流程编辑（仿 Challonge）</h3>
+
+        <!-- 每轮 Bo 设置 -->
+        <div class="mb-5">
+          <div class="text-sm font-semibold text-purple-300 mb-2">每轮对局赛制（Bo）</div>
+          <div class="flex flex-wrap gap-3">
+            <div v-for="r in roundList" :key="r" class="flex items-center gap-2 bg-dark-900 rounded-lg px-3 py-2 border border-dark-700">
+              <span class="text-xs text-dark-300">第 {{ r }} 轮</span>
+              <select
+                :value="roundBo(r)"
+                @change="handleSetRoundBo(r, $event.target.value)"
+                class="px-1.5 py-1 bg-dark-700 border border-dark-600 rounded text-xs text-white focus:outline-none"
+              >
+                <option value="1">Bo1</option>
+                <option value="3">Bo3</option>
+                <option value="5">Bo5</option>
+              </select>
+            </div>
+          </div>
+          <p class="text-xs text-dark-500 mt-2">每轮可独立设置 Bo，未设置的轮次使用赛事默认 Bo</p>
+        </div>
+
+        <!-- 手动添加对局 -->
+        <div class="mb-5 pt-4 border-t border-dark-700">
+          <div class="text-sm font-semibold text-purple-300 mb-2">手动添加对局</div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <select v-model.number="manualForm.roundNumber" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white">
+              <option v-for="r in roundList" :key="'m' + r" :value="r">第 {{ r }} 轮</option>
+            </select>
+            <select v-model.number="manualForm.player1Id" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white">
+              <option :value="0">— 选择选手1 —</option>
+              <option v-for="p in participants" :key="'a' + p.user_id" :value="p.user_id">{{ p.username }}</option>
+            </select>
+            <span class="text-dark-500 text-xs">vs</span>
+            <select v-model.number="manualForm.player2Id" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white">
+              <option :value="0">— 选择选手2 —</option>
+              <option v-for="p in participants" :key="'b' + p.user_id" :value="p.user_id">{{ p.username }}</option>
+            </select>
+            <button
+              @click="handleAddMatch"
+              class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              + 添加对局
+            </button>
+          </div>
+          <p class="text-xs text-dark-500 mt-2">可自由安排比赛流程；在下方对局卡片上可改选手/胜者/比分或重开对局</p>
+        </div>
+
+        <!-- 重置 -->
+        <div class="pt-4 border-t border-dark-700">
+          <button
+            @click="handleReset"
+            class="px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            🔄 重置赛事（清空对局与战绩，重新抽签）
+          </button>
         </div>
       </div>
 
@@ -202,6 +269,61 @@
                 </button>
               </div>
               <span v-else class="text-xs text-dark-500">等待比赛</span>
+
+              <!-- 组织者编辑 -->
+              <div v-if="canManage" class="flex items-center gap-1.5 shrink-0">
+                <button
+                  @click="toggleEditMatch(m)"
+                  class="px-2 py-1 bg-purple-600/70 hover:bg-purple-600 text-white text-xs rounded-md transition-colors"
+                >
+                  ✏️ 编辑
+                </button>
+                <button
+                  v-if="m.status === 'completed' && m.player2_id"
+                  @click="handleReopenMatch(m)"
+                  class="px-2 py-1 bg-yellow-600/70 hover:bg-yellow-600 text-white text-xs rounded-md transition-colors"
+                >
+                  ↺ 重开
+                </button>
+                <span class="text-xs text-dark-500 ml-1">Bo{{ m.bo || 3 }}</span>
+              </div>
+            </div>
+
+            <!-- 组织者对局编辑面板 -->
+            <div v-if="canManage && editMatchId === m.id" class="mt-3 pt-3 border-t border-dark-700 bg-dark-900/60 rounded-lg p-3">
+              <div class="flex items-center gap-2 flex-wrap">
+                <select v-model.number="editForm.player1Id" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white">
+                  <option :value="m.player1_id">{{ m.player1_username || '空位' }}</option>
+                  <option v-for="p in participants" :key="'e1' + p.user_id" :value="p.user_id">{{ p.username }}</option>
+                </select>
+                <span class="text-dark-500 text-xs">vs</span>
+                <select v-model.number="editForm.player2Id" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white">
+                  <option :value="m.player2_id">{{ m.player2_username || '空位' }}</option>
+                  <option v-for="p in participants" :key="'e2' + p.user_id" :value="p.user_id">{{ p.username }}</option>
+                </select>
+                <input
+                  v-model="editForm.score"
+                  placeholder="比分 如 2:1"
+                  class="w-20 px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white placeholder-dark-600"
+                />
+                <select v-model.number="editForm.winnerId" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white">
+                  <option :value="0">— 胜者 —</option>
+                  <option :value="editForm.player1Id">选手1 胜</option>
+                  <option :value="editForm.player2Id">选手2 胜</option>
+                </select>
+                <button
+                  @click="handleSaveEditMatch(m)"
+                  class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-semibold rounded-lg transition-colors"
+                >
+                  保存修改
+                </button>
+                <button
+                  @click="editMatchId = null"
+                  class="px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-white text-xs rounded-lg transition-colors"
+                >
+                  取消
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -313,6 +435,108 @@ const matchesByRound = computed(() => {
 function isMyMatch(m) {
   if (!profile.value) return false
   return m.status === 'pending' && (m.player1_id === profile.value.id || m.player2_id === profile.value.id)
+}
+
+// ===== 流程编辑（仿 Challonge） =====
+const showSettings = ref(false)
+const editMatchId = ref(null)
+const editForm = ref({ player1Id: 0, player2Id: 0, score: '', winnerId: 0 })
+const manualForm = ref({ roundNumber: 1, player1Id: 0, player2Id: 0 })
+
+const roundList = computed(() => {
+  const n = tournament.value?.max_rounds || 1
+  return Array.from({ length: n }, (_, i) => i + 1)
+})
+
+function roundBo(r) {
+  const s = tournament.value?.settings || {}
+  const roundsBo = s.roundsBo || {}
+  return roundsBo[r] || s.bestOf || 3
+}
+
+function toggleEditMatch(m) {
+  if (editMatchId.value === m.id) {
+    editMatchId.value = null
+    return
+  }
+  editMatchId.value = m.id
+  editForm.value = {
+    player1Id: m.player1_id || 0,
+    player2Id: m.player2_id || 0,
+    score: m.score || '',
+    winnerId: m.winner_id || 0,
+  }
+}
+
+async function handleSetRoundBo(round, bo) {
+  try {
+    const res = await tournamentApi.setRoundBo(tournamentId.value, round, bo)
+    toastStore.success(res.data.message)
+    await load()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '设置失败')
+  }
+}
+
+async function handleSaveEditMatch(m) {
+  try {
+    const data = {}
+    if (editForm.value.player1Id) data.player1Id = editForm.value.player1Id
+    if (editForm.value.player2Id) data.player2Id = editForm.value.player2Id
+    if (editForm.value.score) data.score = editForm.value.score
+    if (editForm.value.winnerId) data.winnerId = editForm.value.winnerId
+    const res = await tournamentApi.updateMatch(m.id, data)
+    toastStore.success(res.data.message)
+    editMatchId.value = null
+    await load()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '保存失败')
+  }
+}
+
+async function handleReopenMatch(m) {
+  if (!confirm(`确定重开对局 #${m.id} 吗？将撤销其积分影响。`)) return
+  try {
+    const res = await tournamentApi.updateMatch(m.id, { status: 'pending' })
+    toastStore.success(res.data.message)
+    await load()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '重开失败')
+  }
+}
+
+async function handleAddMatch() {
+  if (!manualForm.value.player1Id || !manualForm.value.player2Id) {
+    toastStore.warning('请选择两位选手')
+    return
+  }
+  if (manualForm.value.player1Id === manualForm.value.player2Id) {
+    toastStore.warning('两名选手不能相同')
+    return
+  }
+  try {
+    const res = await tournamentApi.addMatch(tournamentId.value, {
+      roundNumber: manualForm.value.roundNumber,
+      bracket: 'main',
+      player1Id: manualForm.value.player1Id,
+      player2Id: manualForm.value.player2Id,
+    })
+    toastStore.success(res.data.message)
+    await load()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '添加失败')
+  }
+}
+
+async function handleReset() {
+  if (!confirm('确定重置赛事吗？将删除所有对局并清空战绩，回到报名状态。')) return
+  try {
+    const res = await tournamentApi.reset(tournamentId.value)
+    toastStore.success(res.data.message)
+    await load()
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '重置失败')
+  }
 }
 
 async function load() {

@@ -64,6 +64,13 @@ export const matchApi = {
   history: (page = 1, limit = 20) => api.get('/matches/history', { params: { page, limit } }),
   getById: (id) => api.get(`/matches/${id}`),
   recent: (limit = 20) => api.get('/matches/public/recent', { params: { limit } }),
+  uploadScreenshot: (id, file) => {
+    const fd = new FormData()
+    fd.append('screenshot', file)
+    return api.post(`/matches/${id}/screenshots`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  getScreenshots: (id) => api.get(`/matches/${id}/screenshots`),
+  saveOcr: (id, shotId, ocrText) => api.post(`/matches/${id}/screenshots/${shotId}/ocr`, { ocrText }),
 }
 
 // 排行榜 API
@@ -115,6 +122,12 @@ export const tournamentApi = {
   reportMatch: (matchId, data) => api.post(`/tournaments/matches/${matchId}/report`, data),
   getRound: (id, round) => api.get(`/tournaments/${id}/rounds/${round}`),
   getStandings: (id) => api.get(`/tournaments/${id}/standings`),
+  setRoundBo: (id, round, bo) => api.put(`/tournaments/${id}/rounds/${round}/bo`, { bo }),
+  updateMatch: (matchId, data) => api.put(`/tournaments/matches/${matchId}`, data),
+  addMatch: (id, data) => api.post(`/tournaments/${id}/matches`, data),
+  reset: (id) => api.post(`/tournaments/${id}/reset`),
 }
 
 export default api
+
+

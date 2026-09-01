@@ -279,6 +279,85 @@
           </div>
         </div>
 
+        <!-- 📷 对局截图识别 -->
+        <div class="mb-5 bg-dark-900 rounded-xl border border-dark-700 overflow-hidden">
+          <button
+            @click="showShotForm = !showShotForm"
+            class="w-full px-4 py-3 flex items-center justify-between text-left transition-colors hover:bg-dark-800"
+          >
+            <span class="font-semibold text-white">📷 对局截图识别（自动识别伤害数据）</span>
+            <span class="text-xs text-dark-400">{{ showShotForm ? '收起 ▲' : '展开 ▼' }} <span class="ml-1">（选填）</span></span>
+          </button>
+
+          <div v-if="showShotForm" class="p-4 space-y-4">
+            <!-- 上传 -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <input
+                ref="shotInput"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                class="hidden"
+                @change="onShotSelected"
+              />
+              <button
+                @click="$refs.shotInput.click()"
+                class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                选择截图
+              </button>
+              <span v-if="selectedShotName" class="text-xs text-dark-300">{{ selectedShotName }}</span>
+              <button
+                v-if="selectedShot"
+                @click="handleUploadShot"
+                :disabled="uploadingShot"
+                class="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-dark-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {{ uploadingShot ? '上传中...' : '上传截图' }}
+              </button>
+              <button
+                v-if="shotUploaded"
+                @click="handleOcr"
+                :disabled="ocrBusy"
+                class="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-dark-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {{ ocrBusy ? '识别中...' : '🔍 识别伤害数字' }}
+              </button>
+            </div>
+
+            <!-- 截图预览 -->
+            <div v-if="shotPreviewUrl" class="rounded-lg overflow-hidden border border-dark-700 max-w-sm">
+              <img :src="shotPreviewUrl" class="w-full" alt="对局截图" />
+            </div>
+
+            <!-- OCR 结果 -->
+            <div v-if="ocrNumbers.length > 0">
+              <div class="text-xs text-dark-400 mb-2">
+                识别到 {{ ocrNumbers.length }} 个数字（点击数字填入下一个未填的伤害框，或点"自动填入"）：
+              </div>
+              <div class="flex flex-wrap gap-1.5 mb-2">
+                <button
+                  v-for="(n, i) in ocrNumbers"
+                  :key="i"
+                  @click="fillNextDamage(n)"
+                  class="px-2 py-1 rounded-md bg-dark-700 hover:bg-primary-600 text-white text-xs font-mono transition-colors"
+                >
+                  {{ n }}
+                </button>
+              </div>
+              <button
+                @click="autoFillDamage"
+                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors"
+              >
+                ⚡ 自动填入
+              </button>
+              <p class="text-xs text-dark-500 mt-2">
+                识别结果可能不准确，请对照截图核对后再提交
+              </p>
+            </div>
+            <div v-else-if="ocrBusy" class="text-xs text-dark-400 animate-pulse">正在识别图片中的数字，请稍候...</div>
+          </div>
+        </div>
+
         <button
           @click="handleReport"
           :disabled="reporting || !hasValidScore"
@@ -401,13 +480,158 @@ import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
-import { heroStatsApi } from '../api'
+import { heroStatsApi, matchApi } from '../api'
 import UserAvatar from '../components/UserAvatar.vue'
+import { createWorker } from 'tesseract.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const matchStore = useMatchStore()
 const toastStore = useToastStore()
+
+// 截图识别状态
+const showShotForm = ref(false)
+const selectedShot = ref(null)
+const selectedShotName = ref('')
+const shotPreviewUrl = ref('')
+const shotUploaded = ref(false)
+const shotId = ref(null)
+const uploadingShot = ref(false)
+const ocrBusy = ref(false)
+const ocrNumbers = ref([])
+let ocrWorker = null
+
+function onShotSelected(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  selectedShot.value = file
+  selectedShotName.value = file.name
+  shotUploaded.value = false
+  ocrNumbers.value = []
+  if (shotPreviewUrl.value) URL.revokeObjectURL(shotPreviewUrl.value)
+  shotPreviewUrl.value = URL.createObjectURL(file)
+}
+
+async function handleUploadShot() {
+  if (!selectedShot.value || !match.value) return
+  uploadingShot.value = true
+  try {
+    const res = await matchApi.uploadScreenshot(match.value.id, selectedShot.value)
+    shotId.value = res.data.screenshot.id
+    shotUploaded.value = true
+    toastStore.success('截图已上传')
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '上传失败')
+  } finally {
+    uploadingShot.value = false
+  }
+}
+
+async function getOcrWorker() {
+  if (ocrWorker) return ocrWorker
+  ocrWorker = await createWorker('eng', 1, {
+    logger: () => {},
+  })
+  return ocrWorker
+}
+
+async function handleOcr() {
+  if (!shotPreviewUrl.value) return
+  ocrBusy.value = true
+  ocrNumbers.value = []
+  try {
+    const worker = await getOcrWorker()
+    // 预处理：灰度 + 放大 2 倍 + 对比度，提升数字识别率
+    const processed = await preprocessForOcr(shotPreviewUrl.value)
+    const { data } = await worker.recognize(processed)
+    const text = data.text || ''
+    // 提取数字：过滤出合理的伤害值（3-7 位数字）
+    const nums = (text.match(/\d{3,7}/g) || [])
+      .map(Number)
+      .filter((n) => n >= 100 && n <= 999999)
+      .slice(0, 20)
+    ocrNumbers.value = [...new Set(nums)]
+    // 保存 OCR 文本留档
+    if (shotId.value && text) {
+      matchApi.saveOcr(match.value.id, shotId.value, text).catch(() => {})
+    }
+    if (ocrNumbers.value.length === 0) {
+      toastStore.warning('未识别到数字。建议上传比赛结束后的结算界面截图（英雄伤害表格），识别率更高')
+    } else {
+      toastStore.success(`识别到 ${ocrNumbers.value.length} 个数字，请核对后填入`)
+    }
+  } catch (err) {
+    console.error('OCR error:', err)
+    toastStore.error('识别失败，请稍后重试')
+  } finally {
+    ocrBusy.value = false
+  }
+}
+
+/** OCR 预处理：灰度化 + 放大，提升游戏截图中数字的识别率 */
+function preprocessForOcr(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const scale = 2
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width * scale
+        canvas.height = img.height * scale
+        const ctx = canvas.getContext('2d')
+        ctx.imageSmoothingEnabled = true
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const d = imageData.data
+        for (let i = 0; i < d.length; i += 4) {
+          const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
+          // 简单对比度增强：亮色更亮、暗色更暗
+          const v = gray > 128 ? Math.min(255, gray * 1.3 + 20) : Math.max(0, gray * 0.7 - 10)
+          d[i] = d[i + 1] = d[i + 2] = v
+        }
+        ctx.putImageData(imageData, 0, 0)
+        resolve(canvas.toDataURL('image/png'))
+      } catch (e) {
+        reject(e)
+      }
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+/** 点击数字：填入下一个未填的伤害输入框 */
+function fillNextDamage(n) {
+  const slots = [
+    ...myPicks.value.map((s, i) => ({ slot: s, label: `我方选人${i + 1} 造成`, key: 'damageDealt' })),
+    ...myPicks.value.map((s, i) => ({ slot: s, label: `我方选人${i + 1} 承受`, key: 'damageTaken' })),
+    ...oppPicks.value.map((s, i) => ({ slot: s, label: `对方选人${i + 1} 造成`, key: 'damageDealt' })),
+    ...oppPicks.value.map((s, i) => ({ slot: s, label: `对方选人${i + 1} 承受`, key: 'damageTaken' })),
+  ]
+  const target = slots.find((s) => s.slot.heroId && (s.slot[s.key] === null || s.slot[s.key] === undefined || s.slot[s.key] === ''))
+  if (!target) {
+    toastStore.info('所有已选英雄的伤害已填满')
+    return
+  }
+  target.slot[target.key] = n
+  toastStore.info(`已填入：${target.label}`)
+}
+
+/** 自动按顺序填入所有伤害框 */
+function autoFillDamage() {
+  const slots = [
+    ...myPicks.value.map((s) => s),
+    ...oppPicks.value.map((s) => s),
+  ]
+  let idx = 0
+  for (const s of slots) {
+    if (!s.heroId) continue
+    if (idx < ocrNumbers.value.length) s.damageDealt = ocrNumbers.value[idx++]
+    if (idx < ocrNumbers.value.length) s.damageTaken = ocrNumbers.value[idx++]
+  }
+  toastStore.success(`已按顺序填入 ${Math.min(idx, ocrNumbers.value.length)} 个数字，请核对`)
+}
 
 const profile = computed(() => authStore.profile)
 const match = computed(() => matchStore.currentMatch)

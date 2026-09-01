@@ -76,7 +76,16 @@ class TournamentService {
       bestOf: [1, 3, 5].includes(parseInt(s.bestOf)) ? parseInt(s.bestOf) : 3,
       groupSize: Math.min(8, Math.max(2, parseInt(s.groupSize) || 4)),
       qualifiersPerGroup: Math.min(3, Math.max(1, parseInt(s.qualifiersPerGroup) || 2)),
+      roundsBo: s.roundsBo && typeof s.roundsBo === 'object' ? s.roundsBo : {},
     };
+  }
+
+  /** 获取某一轮的对局赛制（Bo），支持每轮单独设置 */
+  getRoundBo(tournament, roundNumber) {
+    const settings = this.parseSettings(tournament);
+    return [1, 3, 5].includes(parseInt(settings.roundsBo[roundNumber]))
+      ? parseInt(settings.roundsBo[roundNumber])
+      : settings.bestOf;
   }
 
   // ===== 创建 / 报名 =====
@@ -243,16 +252,28 @@ class TournamentService {
     const tournament = await this.getTournament(tournamentId);
     const participants = await this.getParticipants(tournamentId);
 
+    let result;
     switch (tournament.format) {
       case 'single_elim':
-        return await this.generateSingleElimRound(tournament, participants, roundNumber);
+        result = await this.generateSingleElimRound(tournament, participants, roundNumber);
+        break;
       case 'double_elim':
-        return await this.generateDoubleElimRound(tournament, participants, roundNumber);
+        result = await this.generateDoubleElimRound(tournament, participants, roundNumber);
+        break;
       case 'group':
-        return await this.generateGroupRound(tournament, participants, roundNumber);
+        result = await this.generateGroupRound(tournament, participants, roundNumber);
+        break;
       default:
-        return await this.generateSwissRound(tournament, participants, roundNumber);
+        result = await this.generateSwissRound(tournament, participants, roundNumber);
     }
+
+    // 应用本轮对局赛制（Bo）——支持每轮单独设置
+    const bo = this.getRoundBo(tournament, roundNumber);
+    await db.query(
+      'UPDATE tournament_matches SET bo = $1 WHERE tournament_id = $2 AND round_number = $3',
+      [bo, tournamentId, roundNumber]
+    );
+    return result;
   }
 
   // ---- 瑞士轮 ----
@@ -764,6 +785,160 @@ class TournamentService {
     );
     this.emitUpdate(tournamentId, 'tournament:completed', { tournamentId });
     return { success: true, message: '赛事已结束并留档' };
+  }
+
+  // ===== 组织者自由编辑（仿 Challonge） =====
+
+  /** 设置某一轮的对局赛制 Bo（1/3/5） */
+  async setRoundBo(tournamentId, roundNumber, bo, user) {
+    const tournament = await this.getTournament(tournamentId);
+    if (!tournament) return { success: false, message: '赛事不存在' };
+    if (!this.canManage(tournament, user)) {
+      return { success: false, message: '只有管理员或赛事创建者可以操作' };
+    }
+    if (![1, 3, 5].includes(parseInt(bo))) {
+      return { success: false, message: 'Bo 只能为 1、3 或 5' };
+    }
+    const settings = this.parseSettings(tournament);
+    settings.roundsBo = settings.roundsBo || {};
+    settings.roundsBo[roundNumber] = parseInt(bo);
+    await db.query(
+      'UPDATE tournaments SET settings = $1 WHERE id = $2',
+      [JSON.stringify(settings), tournamentId]
+    );
+    await db.query(
+      'UPDATE tournament_matches SET bo = $1 WHERE tournament_id = $2 AND round_number = $3',
+      [parseInt(bo), tournamentId, roundNumber]
+    );
+    this.emitUpdate(tournamentId, 'tournament:updated', { tournamentId });
+    return { success: true, message: `第 ${roundNumber} 轮已设置为 Bo${bo}` };
+  }
+
+  /** 自由编辑对局：改选手 / 改胜者 / 改比分 / 重开 */
+  async updateMatch(matchId, data, user) {
+    const matchResult = await db.query(
+      `SELECT tm.*, t.status AS t_status FROM tournament_matches tm
+       JOIN tournaments t ON tm.tournament_id = t.id WHERE tm.id = $1`,
+      [matchId]
+    );
+    const match = matchResult.rows[0];
+    if (!match) return { success: false, message: '对局不存在' };
+    const tournament = await this.getTournament(match.tournament_id);
+    if (!this.canManage(tournament, user)) {
+      return { success: false, message: '只有管理员或赛事创建者可以操作' };
+    }
+
+    const { player1Id, player2Id, winnerId, score, status } = data || {};
+
+    // 校验选手属于赛事
+    const pids = [player1Id, player2Id].filter((v) => v != null);
+    if (pids.length > 0) {
+      const check = await db.query(
+        'SELECT COUNT(*) AS c FROM tournament_participants WHERE tournament_id = $1 AND user_id = ANY($2)',
+        [match.tournament_id, pids]
+      );
+      if (parseInt(check.rows[0].c) !== pids.length) {
+        return { success: false, message: '所选选手未报名该赛事' };
+      }
+    }
+
+    // 重开对局
+    if (status === 'pending') {
+      await db.query(
+        `UPDATE tournament_matches SET status = 'pending', score = NULL, winner_id = NULL, finished_at = NULL, reported_by = NULL
+         WHERE id = $1`,
+        [matchId]
+      );
+      // 撤销积分影响（简单处理：胜者扣回、败者减回——只对已完成重开）
+      if (match.status === 'completed' && match.winner_id) {
+        const loserId = match.winner_id === match.player1_id ? match.player2_id : match.player1_id;
+        if (loserId) {
+          await db.query(
+            `UPDATE tournament_participants SET points = GREATEST(points - 1, 0), wins = GREATEST(wins - 1, 0)
+             WHERE tournament_id = $1 AND user_id = $2`,
+            [match.tournament_id, match.winner_id]
+          );
+          await db.query(
+            `UPDATE tournament_participants SET losses = GREATEST(losses - 1, 0), eliminated = FALSE
+             WHERE tournament_id = $1 AND user_id = $2`,
+            [match.tournament_id, loserId]
+          );
+        }
+      }
+      this.emitUpdate(match.tournament_id, 'tournament:updated', { tournamentId: match.tournament_id });
+      return { success: true, message: '对局已重开' };
+    }
+
+    // 修改选手（仅待比赛状态）
+    const sets = [];
+    const params = [];
+    let idx = 1;
+    if (player1Id != null && player1Id !== match.player1_id) {
+      sets.push(`player1_id = $${idx++}`);
+      params.push(player1Id);
+    }
+    if (player2Id != null && player2Id !== match.player2_id) {
+      sets.push(`player2_id = $${idx++}`);
+      params.push(player2Id);
+    }
+    if (score != null) { sets.push(`score = $${idx++}`); params.push(String(score)); }
+    if (winnerId != null) { sets.push(`winner_id = $${idx++}`); params.push(winnerId); }
+    if (sets.length > 0) {
+      params.push(matchId);
+      await db.query(`UPDATE tournament_matches SET ${sets.join(', ')} WHERE id = $${idx}`, params);
+    }
+    this.emitUpdate(match.tournament_id, 'tournament:updated', { tournamentId: match.tournament_id });
+    return { success: true, message: '对局已更新' };
+  }
+
+  /** 手动添加一场对局到指定轮次（自由编辑比赛流程） */
+  async addManualMatch(tournamentId, roundNumber, bracket, player1Id, player2Id, user) {
+    const tournament = await this.getTournament(tournamentId);
+    if (!tournament) return { success: false, message: '赛事不存在' };
+    if (!this.canManage(tournament, user)) {
+      return { success: false, message: '只有管理员或赛事创建者可以操作' };
+    }
+    if (!roundNumber || roundNumber < 1) {
+      return { success: false, message: '请指定轮次' };
+    }
+    await this.insertMatch(
+      tournamentId,
+      parseInt(roundNumber),
+      bracket || 'main',
+      player1Id || null,
+      player2Id || null
+    );
+    // 应用本轮 Bo
+    const bo = this.getRoundBo(tournament, parseInt(roundNumber));
+    const r = await db.query(
+      `UPDATE tournament_matches SET bo = $1
+       WHERE tournament_id = $2 AND round_number = $3 AND status = 'pending' AND bo IS NULL`,
+      [bo, tournamentId, parseInt(roundNumber)]
+    );
+    this.emitUpdate(tournamentId, 'tournament:updated', { tournamentId });
+    return { success: true, message: '已手动添加对局' };
+  }
+
+  /** 重置赛事：清空所有对局与战绩，回到报名状态（重新抽签） */
+  async resetTournament(tournamentId, user) {
+    const tournament = await this.getTournament(tournamentId);
+    if (!tournament) return { success: false, message: '赛事不存在' };
+    if (!this.canManage(tournament, user)) {
+      return { success: false, message: '只有管理员或赛事创建者可以操作' };
+    }
+    await db.query('DELETE FROM tournament_matches WHERE tournament_id = $1', [tournamentId]);
+    await db.query(
+      `UPDATE tournament_participants
+       SET points = 0, wins = 0, losses = 0, byes = 0, buchholz = 0, group_number = 0, eliminated = FALSE
+       WHERE tournament_id = $1`,
+      [tournamentId]
+    );
+    await db.query(
+      `UPDATE tournaments SET status = 'registration', current_round = 0, started_at = NULL, finished_at = NULL, settings = settings WHERE id = $1`,
+      [tournamentId]
+    );
+    this.emitUpdate(tournamentId, 'tournament:updated', { tournamentId });
+    return { success: true, message: '赛事已重置，可重新开赛抽签' };
   }
 
   canManage(tournament, user) {

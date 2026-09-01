@@ -217,6 +217,27 @@ async function runMigrations() {
     await addColumnIfMissing('tournament_participants', 'group_number', 'group_number INT DEFAULT 0');
     await addColumnIfMissing('tournament_participants', 'eliminated', 'eliminated BOOLEAN DEFAULT FALSE');
     await addColumnIfMissing('tournament_matches', 'bracket', 'bracket VARCHAR(10) DEFAULT \'main\'');
+    await addColumnIfMissing('tournament_matches', 'bo', 'bo INT DEFAULT 3');
+
+    // 对局截图表
+    const shotTable = await db.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_name = 'match_screenshots'`
+    );
+    if (shotTable.rows.length === 0) {
+      await db.query(
+        `CREATE TABLE IF NOT EXISTS match_screenshots (
+           id SERIAL PRIMARY KEY,
+           match_id INT REFERENCES matches(id) ON DELETE CASCADE,
+           uploaded_by INT REFERENCES users(id),
+           filename VARCHAR(255) NOT NULL,
+           url VARCHAR(500) NOT NULL,
+           ocr_text TEXT,
+           created_at TIMESTAMP DEFAULT NOW()
+         )`
+      );
+      await db.query('CREATE INDEX IF NOT EXISTS idx_screenshots_match ON match_screenshots(match_id)');
+      console.log('Migration: created match_screenshots table');
+    }
   } catch (err) {
     console.error('Migration error:', err);
   }

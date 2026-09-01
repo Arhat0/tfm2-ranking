@@ -162,4 +162,59 @@ router.post('/:id/complete', authMiddleware, async (req, res) => {
   }
 });
 
+// 设置某一轮的 Bo（管理员或创建者）
+router.put('/:id/rounds/:round/bo', authMiddleware, async (req, res) => {
+  try {
+    const tournamentId = parseInt(req.params.id);
+    const round = parseInt(req.params.round);
+    const { bo } = req.body;
+    const result = await getTournamentService().setRoundBo(tournamentId, round, bo, req.user);
+    if (!result.success) return res.status(400).json({ error: result.message });
+    res.json(result);
+  } catch (err) {
+    console.error('Set round bo error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 自由编辑对局（管理员或创建者）：改选手/胜者/比分/重开
+router.put('/matches/:matchId', authMiddleware, async (req, res) => {
+  try {
+    const matchId = parseInt(req.params.matchId);
+    const result = await getTournamentService().updateMatch(matchId, req.body, req.user);
+    if (!result.success) return res.status(400).json({ error: result.message });
+    res.json(result);
+  } catch (err) {
+    console.error('Update tournament match error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 手动添加对局到指定轮次（自由编辑比赛流程）
+router.post('/:id/matches', authMiddleware, async (req, res) => {
+  try {
+    const tournamentId = parseInt(req.params.id);
+    const { roundNumber, bracket, player1Id, player2Id } = req.body;
+    const result = await getTournamentService().addManualMatch(tournamentId, roundNumber, bracket, player1Id, player2Id, req.user);
+    if (!result.success) return res.status(400).json({ error: result.message });
+    res.json(result);
+  } catch (err) {
+    console.error('Add manual match error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 重置赛事（清空对局与战绩，重新报名/抽签）
+router.post('/:id/reset', authMiddleware, async (req, res) => {
+  try {
+    const tournamentId = parseInt(req.params.id);
+    const result = await getTournamentService().resetTournament(tournamentId, req.user);
+    if (!result.success) return res.status(400).json({ error: result.message });
+    res.json(result);
+  } catch (err) {
+    console.error('Reset tournament error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
 module.exports = router;

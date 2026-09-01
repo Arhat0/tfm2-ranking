@@ -1,9 +1,105 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/db');
 const { authMiddleware } = require('../middleware/auth');
 const { getMatchService } = require('../services/matchService');
 
 const router = express.Router();
+
+// 对局截图上传（multer，复用 uploads 目录）
+const uploadsDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+const shotStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'shot-' + uniqueSuffix + ext);
+  },
+});
+const shotUpload = multer({
+  storage: shotStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|webp/;
+    const ok = allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype);
+    if (ok) return cb(null, true);
+    cb(new Error('只支持 JPG、PNG、WebP 格式图片'));
+  },
+});
+
+// 上传对局截图（需是对局参与者）
+router.post('/:id/screenshots', authMiddleware, shotUpload.single('screenshot'), async (req, res) => {
+  try {
+    const matchId = parseInt(req.params.id);
+    if (!req.file) return res.status(400).json({ error: '请选择要上传的截图' });
+
+    const matchResult = await db.query(
+      'SELECT id, player1_id, player2_id FROM matches WHERE id = $1',
+      [matchId]
+    );
+    const match = matchResult.rows[0];
+    if (!match) return res.status(404).json({ error: '对局不存在' });
+    if (match.player1_id !== req.user.id && match.player2_id !== req.user.id) {
+      return res.status(403).json({ error: '你无权为此对局上传截图' });
+    }
+
+    const url = '/uploads/' + req.file.filename;
+    const insertResult = await db.query(
+      `INSERT INTO match_screenshots (match_id, uploaded_by, filename, url, created_at)
+       VALUES ($1, $2, $3, $4, NOW()) RETURNING id, url, created_at`,
+      [matchId, req.user.id, req.file.filename, url]
+    );
+
+    res.status(201).json({ screenshot: insertResult.rows[0] });
+  } catch (err) {
+    console.error('Upload screenshot error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 获取对局截图列表
+router.get('/:id/screenshots', authMiddleware, async (req, res) => {
+  try {
+    const matchId = parseInt(req.params.id);
+    const result = await db.query(
+      `SELECT s.id, s.url, s.ocr_text, s.created_at, u.username AS uploaded_by_username
+       FROM match_screenshots s
+       LEFT JOIN users u ON s.uploaded_by = u.id
+       WHERE s.match_id = $1
+       ORDER BY s.created_at`,
+      [matchId]
+    );
+    res.json({ screenshots: result.rows });
+  } catch (err) {
+    console.error('Get screenshots error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 保存截图的 OCR 识别结果（供识别统计留档）
+router.post('/:id/screenshots/:shotId/ocr', authMiddleware, async (req, res) => {
+  try {
+    const { ocrText } = req.body;
+    if (!ocrText) return res.status(400).json({ error: '缺少识别文本' });
+    const shotId = parseInt(req.params.shotId);
+    const matchId = parseInt(req.params.id);
+    const result = await db.query(
+      `UPDATE match_screenshots SET ocr_text = $1
+       WHERE id = $2 AND match_id = $3 RETURNING id`,
+      [String(ocrText).slice(0, 5000), shotId, matchId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: '截图不存在' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Save OCR error:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
 
 // 获取当前对局
 router.get('/current', authMiddleware, async (req, res) => {

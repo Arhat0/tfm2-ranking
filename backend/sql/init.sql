@@ -132,10 +132,25 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
     score VARCHAR(20),
     winner_id INT REFERENCES users(id),
     status VARCHAR(20) DEFAULT 'pending',
+    bo INT DEFAULT 3,
     reported_by INT REFERENCES users(id),
     created_at TIMESTAMP DEFAULT NOW(),
     finished_at TIMESTAMP
 );
+
+-- ===== 对局截图（识别统计 + 留档） =====
+
+CREATE TABLE IF NOT EXISTS match_screenshots (
+    id SERIAL PRIMARY KEY,
+    match_id INT REFERENCES matches(id) ON DELETE CASCADE,
+    uploaded_by INT REFERENCES users(id),
+    filename VARCHAR(255) NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    ocr_text TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_screenshots_match ON match_screenshots(match_id);
 
 CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournaments(status);
 CREATE INDEX IF NOT EXISTS idx_tmatch_tournament ON tournament_matches(tournament_id, round_number);
