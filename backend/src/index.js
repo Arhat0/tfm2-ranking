@@ -29,6 +29,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// 静态文件：上传的头像
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+
 // API 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

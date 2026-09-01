@@ -13,8 +13,8 @@ class MatchService {
   async getCurrentMatch(userId) {
     const result = await db.query(
       `SELECT m.*,
-              u1.username as player1_username, u1.game_id as player1_game_id,
-              u2.username as player2_username, u2.game_id as player2_game_id
+              u1.username as player1_username, u1.game_id as player1_game_id, u1.avatar as player1_avatar,
+              u2.username as player2_username, u2.game_id as player2_game_id, u2.avatar as player2_avatar
        FROM matches m
        JOIN users u1 ON m.player1_id = u1.id
        JOIN users u2 ON m.player2_id = u2.id
@@ -30,8 +30,8 @@ class MatchService {
   async getMatchById(matchId, userId) {
     const result = await db.query(
       `SELECT m.*,
-              u1.username as player1_username, u1.game_id as player1_game_id,
-              u2.username as player2_username, u2.game_id as player2_game_id
+              u1.username as player1_username, u1.game_id as player1_game_id, u1.avatar as player1_avatar,
+              u2.username as player2_username, u2.game_id as player2_game_id, u2.avatar as player2_avatar
        FROM matches m
        JOIN users u1 ON m.player1_id = u1.id
        JOIN users u2 ON m.player2_id = u2.id
@@ -291,8 +291,10 @@ class MatchService {
       `SELECT m.*,
               u1.username as player1_username,
               u1.game_id as player1_game_id,
+              u1.avatar as player1_avatar,
               u2.username as player2_username,
               u2.game_id as player2_game_id,
+              u2.avatar as player2_avatar,
               rh.change as score_change
        FROM matches m
        JOIN users u1 ON m.player1_id = u1.id

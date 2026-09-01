@@ -15,11 +15,14 @@
         class="bg-dark-800 rounded-xl p-4 border text-center"
         :class="idx === 0 ? 'border-yellow-500/50' : idx === 1 ? 'border-gray-400/50' : 'border-orange-600/50'"
       >
-        <div
-          class="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold"
-          :class="idx === 0 ? 'bg-yellow-500/20 text-yellow-400' : idx === 1 ? 'bg-gray-400/20 text-gray-300' : 'bg-orange-600/20 text-orange-400'"
-        >
-          {{ idx + 1 }}
+        <div class="relative w-14 h-14 mx-auto mb-2">
+          <UserAvatar :avatar="player.avatar" :name="player.gameId" size="xl" class="w-full h-full" />
+          <div
+            class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 border-dark-800"
+            :class="idx === 0 ? 'bg-yellow-500 text-yellow-900' : idx === 1 ? 'bg-gray-400 text-gray-800' : 'bg-orange-600 text-white'"
+          >
+            {{ idx + 1 }}
+          </div>
         </div>
         <div class="font-semibold text-white text-sm truncate">{{ player.gameId }}</div>
         <div class="text-xs text-dark-500 truncate">{{ player.username }}</div>
@@ -67,12 +70,15 @@
                 {{ player.rank }}
               </span>
             </div>
-            <div class="col-span-4">
-              <div class="font-semibold text-white truncate">
-                {{ player.gameId }}
-                <span v-if="player.userId === profile?.id" class="text-primary-400 text-xs ml-1">（我）</span>
+            <div class="col-span-4 flex items-center gap-3">
+              <UserAvatar :avatar="player.avatar" :name="player.gameId" size="sm" />
+              <div class="min-w-0">
+                <div class="font-semibold text-white truncate">
+                  {{ player.gameId }}
+                  <span v-if="player.userId === profile?.id" class="text-primary-400 text-xs ml-1">（我）</span>
+                </div>
+                <div class="text-xs text-dark-500 truncate">{{ player.username }}</div>
               </div>
-              <div class="text-xs text-dark-500 truncate">{{ player.username }}</div>
             </div>
             <div class="col-span-3">
               <TierBadge :tier="player.tier" :score="player.rankScore" />
@@ -116,6 +122,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { leaderboardApi } from '../api'
 import TierBadge from '../components/TierBadge.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const authStore = useAuthStore()
 

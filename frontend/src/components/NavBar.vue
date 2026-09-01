@@ -22,10 +22,13 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <div v-if="authStore.profile" class="text-right hidden sm:block">
-            <div class="text-sm font-medium text-white">{{ authStore.profile.gameId }}</div>
-            <div class="text-xs text-dark-400">
-              <TierBadge :tier="authStore.profile.tier" :score="authStore.profile.rankScore" />
+          <div v-if="authStore.profile" class="flex items-center gap-2">
+            <UserAvatar :avatar="authStore.profile.avatar" :name="authStore.profile.gameId" size="sm" />
+            <div class="text-right hidden sm:block">
+              <div class="text-sm font-medium text-white">{{ authStore.profile.gameId }}</div>
+              <div class="text-xs text-dark-400">
+                <TierBadge :tier="authStore.profile.tier" :score="authStore.profile.rankScore" />
+              </div>
             </div>
           </div>
           <button
@@ -45,6 +48,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import TierBadge from './TierBadge.vue'
+import UserAvatar from './UserAvatar.vue'
 
 const route = useRoute()
 const router = useRouter()

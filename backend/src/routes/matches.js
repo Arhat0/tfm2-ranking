@@ -1,4 +1,5 @@
 const express = require('express');
+const db = require('../config/db');
 const { authMiddleware } = require('../middleware/auth');
 const { getMatchService } = require('../services/matchService');
 
@@ -16,8 +17,8 @@ router.get('/current', authMiddleware, async (req, res) => {
 
     const isPlayer1 = match.player1_id === req.user.id;
     const opponent = isPlayer1
-      ? { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id }
-      : { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id };
+      ? { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id, avatar: match.player2_avatar }
+      : { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id, avatar: match.player1_avatar };
 
     res.json({
       match: {
@@ -134,6 +135,7 @@ router.get('/history', authMiddleware, async (req, res) => {
         id: m.id,
         opponent: isPlayer1 ? m.player2_username : m.player1_username,
         opponentGameId: isPlayer1 ? m.player2_game_id : m.player1_game_id,
+        opponentAvatar: isPlayer1 ? m.player2_avatar : m.player1_avatar,
         won,
         score: parsedResult?.score || null,
         scoreChange: m.score_change,
@@ -157,12 +159,12 @@ router.get('/history', authMiddleware, async (req, res) => {
 // 注意：必须在 /:id 之前定义，否则会被 /:id 拦截
 router.get('/public/recent', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
 
     const result = await db.query(
       `SELECT m.id, m.status, m.result, m.winner_id, m.player1_id, m.player2_id, m.finished_at,
-              u1.username as player1_username, u1.game_id as player1_game_id,
-              u2.username as player2_username, u2.game_id as player2_game_id,
+              u1.username as player1_username, u1.game_id as player1_game_id, u1.avatar as player1_avatar,
+              u2.username as player2_username, u2.game_id as player2_game_id, u2.avatar as player2_avatar,
               rh1.change as player1_score_change,
               rh2.change as player2_score_change
        FROM matches m
@@ -183,12 +185,14 @@ router.get('/public/recent', async (req, res) => {
         player1: {
           username: m.player1_username,
           gameId: m.player1_game_id,
+          avatar: m.player1_avatar,
           scoreChange: m.player1_score_change,
           isWinner: m.winner_id && m.player1_id === m.winner_id,
         },
         player2: {
           username: m.player2_username,
           gameId: m.player2_game_id,
+          avatar: m.player2_avatar,
           scoreChange: m.player2_score_change,
           isWinner: m.winner_id && m.player2_id === m.winner_id,
         },
@@ -220,8 +224,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
       id: match.id,
       status: match.status,
       roomPassword: match.room_password,
-      player1: { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id },
-      player2: { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id },
+      player1: { id: match.player1_id, username: match.player1_username, gameId: match.player1_game_id, avatar: match.player1_avatar },
+      player2: { id: match.player2_id, username: match.player2_username, gameId: match.player2_game_id, avatar: match.player2_avatar },
       result: typeof match.result === 'string' ? JSON.parse(match.result) : match.result,
       winnerId: match.winner_id,
       isWinner: match.winner_id === req.user.id,

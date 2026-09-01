@@ -48,9 +48,14 @@
         <p class="text-dark-400 mb-6">请在游戏内创建或加入房间</p>
 
         <div class="bg-dark-900 rounded-lg p-4 mb-6">
-          <div class="text-sm text-dark-400 mb-1">对手</div>
-          <div class="text-xl font-bold text-white">{{ matchedData.opponent?.gameId }}</div>
-          <div class="text-sm text-dark-500 mt-1">{{ matchedData.opponent?.username }}</div>
+          <div class="text-sm text-dark-400 mb-2">对手</div>
+          <div class="flex items-center gap-3">
+            <UserAvatar :avatar="matchedData.opponent?.avatar" :name="matchedData.opponent?.gameId" size="lg" />
+            <div class="text-left">
+              <div class="text-xl font-bold text-white">{{ matchedData.opponent?.gameId }}</div>
+              <div class="text-sm text-dark-500 mt-1">{{ matchedData.opponent?.username }}</div>
+            </div>
+          </div>
         </div>
 
         <div class="bg-primary-900/30 border border-primary-700 rounded-lg p-4 mb-6">
@@ -118,6 +123,7 @@ import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
 import { matchmakingApi } from '../api'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

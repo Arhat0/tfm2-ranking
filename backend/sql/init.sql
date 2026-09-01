@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     game_id VARCHAR(100) UNIQUE NOT NULL,
+    avatar VARCHAR(255),
     is_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );

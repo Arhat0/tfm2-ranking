@@ -16,7 +16,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
     const result = await db.query(
       `SELECT pp.user_id, pp.rank_score, pp.wins, pp.losses, pp.win_streak, pp.tier,
-              u.username, u.game_id,
+              u.username, u.game_id, u.avatar,
               ROW_NUMBER() OVER (ORDER BY pp.rank_score DESC, pp.wins DESC) as rank
        FROM player_profiles pp
        JOIN users u ON pp.user_id = u.id
@@ -33,6 +33,7 @@ router.get('/', authMiddleware, async (req, res) => {
         userId: p.user_id,
         username: p.username,
         gameId: p.game_id,
+        avatar: p.avatar,
         rankScore: p.rank_score,
         tier: p.tier,
         wins: p.wins,

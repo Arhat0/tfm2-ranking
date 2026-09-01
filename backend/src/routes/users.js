@@ -1,14 +1,48 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/db');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
+// 配置 multer 存储
+const uploadsDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'avatar-' + uniqueSuffix + ext);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (extname && mimetype) {
+      return cb(null, true);
+    }
+    cb(new Error('只支持 JPG、PNG、GIF、WebP 格式图片'));
+  },
+});
+
 // 获取当前用户信息（含排位数据）
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const profileResult = await db.query(
-      `SELECT pp.*, u.username, u.email, u.game_id, u.is_admin
+      `SELECT pp.*, u.username, u.email, u.game_id, u.is_admin, u.avatar
        FROM player_profiles pp
        JOIN users u ON pp.user_id = u.id
        WHERE pp.user_id = $1`,
@@ -29,6 +63,7 @@ router.get('/me', authMiddleware, async (req, res) => {
       email: profile.email,
       gameId: profile.game_id,
       isAdmin: profile.is_admin,
+      avatar: profile.avatar,
       rankScore: profile.rank_score,
       wins: profile.wins,
       losses: profile.losses,
@@ -41,6 +76,35 @@ router.get('/me', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Get me error:', err);
     res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// 上传头像
+router.post('/avatar', authMiddleware, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '请选择要上传的图片' });
+    }
+
+    const avatarUrl = '/uploads/' + req.file.filename;
+
+    // 删除旧头像
+    const oldResult = await db.query('SELECT avatar FROM users WHERE id = $1', [req.user.id]);
+    const oldAvatar = oldResult.rows[0]?.avatar;
+    if (oldAvatar && oldAvatar.startsWith('/uploads/')) {
+      const oldPath = path.join(uploadsDir, oldAvatar.replace('/uploads/', ''));
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+      }
+    }
+
+    // 更新用户头像
+    await db.query('UPDATE users SET avatar = $1 WHERE id = $2', [avatarUrl, req.user.id]);
+
+    res.json({ success: true, avatar: avatarUrl, message: '头像上传成功' });
+  } catch (err) {
+    console.error('Upload avatar error:', err);
+    res.status(500).json({ error: err.message || '头像上传失败' });
   }
 });
 
@@ -113,7 +177,7 @@ router.put('/me', authMiddleware, async (req, res) => {
 
     // 返回更新后的用户信息
     const profileResult = await db.query(
-      `SELECT pp.*, u.username, u.email, u.game_id, u.is_admin
+      `SELECT pp.*, u.username, u.email, u.game_id, u.is_admin, u.avatar
        FROM player_profiles pp
        JOIN users u ON pp.user_id = u.id
        WHERE pp.user_id = $1`,
@@ -130,6 +194,7 @@ router.put('/me', authMiddleware, async (req, res) => {
       email: profile.email,
       gameId: profile.game_id,
       isAdmin: profile.is_admin,
+      avatar: profile.avatar,
       rankScore: profile.rank_score,
       wins: profile.wins,
       losses: profile.losses,

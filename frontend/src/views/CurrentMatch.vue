@@ -34,9 +34,7 @@
       <div class="bg-dark-800 rounded-xl p-6 border border-dark-700">
         <div class="flex items-center justify-between">
           <div class="text-center flex-1">
-            <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span class="text-2xl font-bold text-white">{{ match.opponent?.gameId?.charAt(0) || '?' }}</span>
-            </div>
+            <UserAvatar :avatar="match.opponent?.avatar" :name="match.opponent?.gameId" size="xl" class="mx-auto mb-2" />
             <div class="font-semibold text-white text-lg">{{ match.opponent?.gameId }}</div>
             <div class="text-sm text-dark-400">{{ match.opponent?.username }}</div>
           </div>
@@ -46,9 +44,7 @@
           </div>
 
           <div class="text-center flex-1">
-            <div class="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span class="text-2xl font-bold text-white">{{ profile?.gameId?.charAt(0) || '?' }}</span>
-            </div>
+            <UserAvatar :avatar="profile?.avatar" :name="profile?.gameId" size="xl" class="mx-auto mb-2" />
             <div class="font-semibold text-white text-lg">{{ profile?.gameId }}（你）</div>
             <div class="text-sm text-dark-400">{{ profile?.username }}</div>
           </div>
@@ -271,6 +267,7 @@ import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
 import { getSocket } from '../api/socket'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

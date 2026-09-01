@@ -42,11 +42,14 @@
           class="flex items-center justify-between p-4 hover:bg-dark-700/50 transition-colors"
         >
           <div class="flex items-center gap-4">
-            <div
-              class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
-              :class="match.won ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'"
-            >
-              {{ match.won ? 'W' : 'L' }}
+            <div class="relative">
+              <UserAvatar :avatar="match.opponentAvatar" :name="match.opponentGameId || match.opponent" size="md" />
+              <div
+                class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold border-2 border-dark-800"
+                :class="match.won ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
+              >
+                {{ match.won ? 'W' : 'L' }}
+              </div>
             </div>
             <div>
               <div class="font-medium text-white">{{ match.opponentGameId || match.opponent }}</div>
@@ -97,6 +100,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { matchApi } from '../api'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const authStore = useAuthStore()
 

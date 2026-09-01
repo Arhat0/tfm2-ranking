@@ -37,6 +37,13 @@ export const authApi = {
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/users/me'),
   updateProfile: (data) => api.put('/users/me', data),
+  uploadAvatar: (file) => {
+    const formData = new FormData()
+    formData.append('avatar', file)
+    return api.post('/users/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // 匹配 API

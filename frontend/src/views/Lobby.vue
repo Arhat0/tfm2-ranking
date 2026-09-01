@@ -208,6 +208,34 @@
         </div>
 
         <div class="space-y-4">
+          <!-- 头像上传 -->
+          <div class="flex items-center gap-4">
+            <div class="relative">
+              <UserAvatar :avatar="editForm.avatar || profile?.avatar" :name="editForm.gameId || profile?.gameId" size="xl" />
+              <label
+                class="absolute bottom-0 right-0 w-7 h-7 bg-primary-500 hover:bg-primary-600 rounded-full flex items-center justify-center cursor-pointer border-2 border-dark-800 transition-colors"
+                title="上传头像"
+              >
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <input
+                  ref="avatarInput"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  class="hidden"
+                  @change="handleAvatarUpload"
+                />
+              </label>
+            </div>
+            <div>
+              <div class="text-sm font-medium text-white">头像</div>
+              <div class="text-xs text-dark-400 mt-1">支持 JPG、PNG、GIF、WebP，最大 5MB</div>
+              <div v-if="uploadingAvatar" class="text-xs text-primary-400 mt-1">上传中...</div>
+            </div>
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-dark-300 mb-1">战队名（游戏ID）</label>
             <input
@@ -267,14 +295,12 @@
         <div class="flex items-center justify-between mb-6">
           <!-- 玩家1 -->
           <div class="text-center flex-1">
-            <div
-              class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-2"
-              :class="selectedMatch.player1.isWinner ? 'bg-green-600/20' : 'bg-dark-700'"
-            >
-              <span class="text-xl font-bold" :class="selectedMatch.player1.isWinner ? 'text-green-400' : 'text-white'">
-                {{ selectedMatch.player1.gameId?.charAt(0) || '?' }}
-              </span>
-            </div>
+            <UserAvatar
+              :avatar="selectedMatch.player1.avatar"
+              :name="selectedMatch.player1.gameId"
+              size="xl"
+              class="mx-auto mb-2"
+            />
             <div class="font-semibold" :class="selectedMatch.player1.isWinner ? 'text-green-400' : 'text-white'">
               {{ selectedMatch.player1.gameId }}
               <span v-if="selectedMatch.player1.isWinner" class="text-xs ml-1">胜</span>
@@ -293,14 +319,12 @@
 
           <!-- 玩家2 -->
           <div class="text-center flex-1">
-            <div
-              class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-2"
-              :class="selectedMatch.player2.isWinner ? 'bg-green-600/20' : 'bg-dark-700'"
-            >
-              <span class="text-xl font-bold" :class="selectedMatch.player2.isWinner ? 'text-green-400' : 'text-white'">
-                {{ selectedMatch.player2.gameId?.charAt(0) || '?' }}
-              </span>
-            </div>
+            <UserAvatar
+              :avatar="selectedMatch.player2.avatar"
+              :name="selectedMatch.player2.gameId"
+              size="xl"
+              class="mx-auto mb-2"
+            />
             <div class="font-semibold" :class="selectedMatch.player2.isWinner ? 'text-green-400' : 'text-white'">
               <span v-if="selectedMatch.player2.isWinner" class="text-xs mr-1">胜</span>
               {{ selectedMatch.player2.gameId }}
@@ -347,8 +371,9 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useMatchStore } from '../stores/match'
 import { useToastStore } from '../stores/toast'
-import { matchApi } from '../api'
+import { matchApi, authApi } from '../api'
 import TierBadge from '../components/TierBadge.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -365,9 +390,12 @@ const selectedMatch = ref(null)
 // 编辑资料
 const showEditModal = ref(false)
 const savingProfile = ref(false)
+const uploadingAvatar = ref(false)
+const avatarInput = ref(null)
 const editForm = ref({
   username: '',
   gameId: '',
+  avatar: '',
 })
 
 // 打开编辑模态框时填充当前值
@@ -375,8 +403,31 @@ watch(showEditModal, (val) => {
   if (val && profile.value) {
     editForm.value.username = profile.value.username
     editForm.value.gameId = profile.value.gameId
+    editForm.value.avatar = profile.value.avatar || ''
   }
 })
+
+async function handleAvatarUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  if (file.size > 5 * 1024 * 1024) {
+    toastStore.error('图片大小不能超过 5MB')
+    return
+  }
+
+  uploadingAvatar.value = true
+  try {
+    const res = await authApi.uploadAvatar(file)
+    editForm.value.avatar = res.data.avatar
+    toastStore.success('头像上传成功')
+  } catch (err) {
+    toastStore.error(err.response?.data?.error || '头像上传失败')
+  } finally {
+    uploadingAvatar.value = false
+    if (avatarInput.value) avatarInput.value.value = ''
+  }
+}
 
 async function handleSaveProfile() {
   if (!editForm.value.username || !editForm.value.gameId) {
@@ -446,7 +497,7 @@ async function loadRecentMatches() {
 async function loadAllRecentMatches() {
   loadingRecent.value = true
   try {
-    const res = await matchApi.recent(20)
+    const res = await matchApi.recent(100)
     recentAllMatches.value = res.data.matches
   } catch (err) {
     console.error('Load all recent matches error:', err)
