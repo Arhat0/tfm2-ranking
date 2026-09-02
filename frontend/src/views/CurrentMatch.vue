@@ -355,31 +355,50 @@
             </div>
 
             <!-- OCR 结果 -->
-            <div v-if="ocrNumbers.length > 0">
-              <div class="text-xs text-dark-400 mb-2">
-                识别到 {{ ocrNumbers.length }} 个数字（点击数字填入下一个未填的伤害框，或点"自动填入"）：
+            <div v-if="ocrResults.length > 0" class="space-y-3">
+              <div class="text-xs text-dark-400">
+                已按截图位置识别 10 个“总造成伤害”区域。不会读取右侧 KDA、金币、CS 等无关数字。
               </div>
-              <div class="flex flex-wrap gap-1.5 mb-2">
-                <button
-                  v-for="(n, i) in ocrNumbers"
-                  :key="i"
-                  @click="fillNextDamage(n)"
-                  class="px-2 py-1 rounded-md bg-dark-700 hover:bg-primary-600 text-white text-xs font-mono transition-colors"
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div
+                  v-for="r in ocrResults"
+                  :key="`${r.side}-${r.index}`"
+                  class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-dark-800 border border-dark-700"
                 >
-                  {{ n }}
+                  <div class="min-w-0">
+                    <div class="text-xs text-dark-300">{{ r.side === 'me' ? '我方' : '对方' }} · 选人 {{ r.index }}</div>
+                    <div class="text-sm text-white truncate">{{ r.heroName || '尚未选择英雄' }}</div>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <div class="text-base font-bold font-mono" :class="r.confidence >= 80 ? 'text-orange-300' : 'text-yellow-300'">
+                      {{ r.damage === null ? '识别失败' : formatDamage(r.damage) }}
+                    </div>
+                    <div v-if="r.damage !== null" class="text-[10px] text-dark-500">置信度 {{ Math.round(r.confidence) }}%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  @click="autoFillDamage"
+                  :disabled="!ocrResults.some(r => r.damage !== null)"
+                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-dark-700 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors"
+                >
+                  ⚡ 按截图位置自动填入“造成伤害”
+                </button>
+                <button
+                  @click="clearOcrDamage"
+                  class="px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                >
+                  清除本次识别
                 </button>
               </div>
-              <button
-                @click="autoFillDamage"
-                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors"
-              >
-                ⚡ 自动填入
-              </button>
-              <p class="text-xs text-dark-500 mt-2">
-                识别结果可能不准确，请对照截图核对后再提交
+              <p class="text-xs text-dark-500">
+                这张结算图只能直接得到“造成伤害”。“承受伤害”不在截图的同一字段中，因此不会用 OCR 数字乱填；识别后仍建议核对。
               </p>
             </div>
-            <div v-else-if="ocrBusy" class="text-xs text-dark-400 animate-pulse">正在识别图片中的数字，请稍候...</div>
+            <div v-else-if="ocrBusy" class="text-xs text-dark-400 animate-pulse">正在按 10 个英雄行区域识别伤害，请稍候...</div>
           </div>
         </div>
 
@@ -524,7 +543,7 @@ const shotUploaded = ref(false)
 const shotId = ref(null)
 const uploadingShot = ref(false)
 const ocrBusy = ref(false)
-const ocrNumbers = ref([])
+const ocrResults = ref([])
 let ocrWorker = null
 
 function onShotSelected(e) {
@@ -533,7 +552,8 @@ function onShotSelected(e) {
   selectedShot.value = file
   selectedShotName.value = file.name
   shotUploaded.value = false
-  ocrNumbers.value = []
+  shotId.value = null
+  ocrResults.value = []
   if (shotPreviewUrl.value) URL.revokeObjectURL(shotPreviewUrl.value)
   shotPreviewUrl.value = URL.createObjectURL(file)
 }
@@ -558,33 +578,137 @@ async function getOcrWorker() {
   ocrWorker = await createWorker('eng', 1, {
     logger: () => {},
   })
+  await ocrWorker.setParameters({
+    tessedit_pageseg_mode: '7',
+    tessedit_char_whitelist: '0123456789,',
+  })
   return ocrWorker
+}
+
+/**
+ * 固定结算页布局的 10 个“总造成伤害”数字区域。
+ * 使用归一化坐标，因此截图缩放后仍能工作。
+ * 该截图约为 1891x796：左列 x≈155~320，右列 x≈650~770，五行 y≈211/333/455/577/699。
+ */
+const DAMAGE_REGIONS = [
+  { side: 'me', index: 1, x1: 0.082, x2: 0.169 },
+  { side: 'me', index: 2, x1: 0.082, x2: 0.169 },
+  { side: 'me', index: 3, x1: 0.082, x2: 0.169 },
+  { side: 'me', index: 4, x1: 0.082, x2: 0.169 },
+  { side: 'me', index: 5, x1: 0.082, x2: 0.169 },
+  { side: 'opp', index: 1, x1: 0.344, x2: 0.407 },
+  { side: 'opp', index: 2, x1: 0.344, x2: 0.407 },
+  { side: 'opp', index: 3, x1: 0.344, x2: 0.407 },
+  { side: 'opp', index: 4, x1: 0.344, x2: 0.407 },
+  { side: 'opp', index: 5, x1: 0.344, x2: 0.407 },
+]
+const DAMAGE_Y = [0.286, 0.440, 0.593, 0.746, 0.900]
+
+function getHeroName(heroId) {
+  if (!heroId) return ''
+  const hero = heroes.value.find((h) => Number(h.id) === Number(heroId))
+  return hero?.name || hero?.displayName || ''
+}
+
+function formatDamage(n) {
+  return Number(n || 0).toLocaleString('en-US')
+}
+
+function normalizeOcrDamage(text) {
+  const cleaned = String(text || '')
+    .replace(/[，]/g, ',')
+    .replace(/[.]/g, '')
+    .replace(/\s+/g, '')
+  const matches = cleaned.match(/\d{1,3}(?:,\d{3})+|\d{3,7}/g) || []
+  const candidates = matches
+    .map((v) => Number(v.replace(/,/g, '')))
+    .filter((n) => n >= 100 && n <= 999999)
+  return candidates.length ? candidates[0] : null
+}
+
+function preprocessDamageRegion(canvas, region) {
+  const ctx = canvas.getContext('2d')
+  const w = Math.max(1, Math.round(canvas.width * (region.x2 - region.x1)))
+  const h = Math.max(1, Math.round(canvas.height * 0.043))
+  const x = Math.round(canvas.width * region.x1)
+  const y = Math.round(canvas.height * DAMAGE_Y[region.index - 1] - h * 0.5)
+
+  const out = document.createElement('canvas')
+  out.width = w * 4
+  out.height = h * 4
+  const outCtx = out.getContext('2d')
+  outCtx.imageSmoothingEnabled = true
+  outCtx.drawImage(canvas, x, y, w, h, 0, 0, out.width, out.height)
+
+  const imageData = outCtx.getImageData(0, 0, out.width, out.height)
+  const d = imageData.data
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
+    const v = gray < 130 ? 0 : 255
+    d[i] = d[i + 1] = d[i + 2] = v
+  }
+  outCtx.putImageData(imageData, 0, 0)
+  return out.toDataURL('image/png')
+}
+
+function loadImageCanvas(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth || img.width
+      canvas.height = img.naturalHeight || img.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      resolve(canvas)
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+async function recognizeDamageRegion(worker, sourceCanvas, region) {
+  const processed = preprocessDamageRegion(sourceCanvas, region)
+  const { data } = await worker.recognize(processed)
+  const damage = normalizeOcrDamage(data.text)
+  return {
+    ...region,
+    damage,
+    confidence: damage === null ? 0 : Number(data.confidence || 0),
+  }
 }
 
 async function handleOcr() {
   if (!shotPreviewUrl.value) return
   ocrBusy.value = true
-  ocrNumbers.value = []
+  ocrResults.value = []
   try {
     const worker = await getOcrWorker()
-    // 预处理：灰度 + 放大 2 倍 + 对比度，提升数字识别率
-    const processed = await preprocessForOcr(shotPreviewUrl.value)
-    const { data } = await worker.recognize(processed)
-    const text = data.text || ''
-    // 提取数字：过滤出合理的伤害值（3-7 位数字）
-    const nums = (text.match(/\d{3,7}/g) || [])
-      .map(Number)
-      .filter((n) => n >= 100 && n <= 999999)
-      .slice(0, 20)
-    ocrNumbers.value = [...new Set(nums)]
-    // 保存 OCR 文本留档
-    if (shotId.value && text) {
-      matchApi.saveOcr(match.value.id, shotId.value, text).catch(() => {})
+    const sourceCanvas = await loadImageCanvas(shotPreviewUrl.value)
+    const aspect = sourceCanvas.width / sourceCanvas.height
+    if (aspect < 2.05 || aspect > 2.75) {
+      toastStore.warning('截图比例与标准结算页差异较大，仍会尝试识别，但请重点核对结果')
     }
-    if (ocrNumbers.value.length === 0) {
-      toastStore.warning('未识别到数字。建议上传比赛结束后的结算界面截图（英雄伤害表格），识别率更高')
+
+    const results = []
+    for (const region of DAMAGE_REGIONS) {
+      const result = await recognizeDamageRegion(worker, sourceCanvas, region)
+      result.heroName = getHeroName(region.side === 'me' ? myPicks.value[region.index - 1]?.heroId : oppPicks.value[region.index - 1]?.heroId)
+      results.push(result)
+    }
+    ocrResults.value = results
+
+    // 保存原始识别结果留档，便于之后排查 OCR 误识别。
+    if (shotId.value && results.length) {
+      const ocrText = results.map((r) => `${r.side === 'me' ? '我方' : '对方'}${r.index}: ${r.damage ?? ''}`).join('\n')
+      matchApi.saveOcr(match.value.id, shotId.value, ocrText).catch(() => {})
+    }
+
+    const successCount = results.filter((r) => r.damage !== null).length
+    if (!successCount) {
+      toastStore.warning('没有识别到伤害数字。请确认上传的是完整的结算界面截图')
     } else {
-      toastStore.success(`识别到 ${ocrNumbers.value.length} 个数字，请核对后填入`)
+      toastStore.success(`已识别 ${successCount}/10 个英雄的造成伤害，可按截图位置自动填入`)
     }
   } catch (err) {
     console.error('OCR error:', err)
@@ -594,69 +718,32 @@ async function handleOcr() {
   }
 }
 
-/** OCR 预处理：灰度化 + 放大，提升游戏截图中数字的识别率 */
-function preprocessForOcr(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      try {
-        const scale = 2
-        const canvas = document.createElement('canvas')
-        canvas.width = img.width * scale
-        canvas.height = img.height * scale
-        const ctx = canvas.getContext('2d')
-        ctx.imageSmoothingEnabled = true
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const d = imageData.data
-        for (let i = 0; i < d.length; i += 4) {
-          const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
-          // 简单对比度增强：亮色更亮、暗色更暗
-          const v = gray > 128 ? Math.min(255, gray * 1.3 + 20) : Math.max(0, gray * 0.7 - 10)
-          d[i] = d[i + 1] = d[i + 2] = v
-        }
-        ctx.putImageData(imageData, 0, 0)
-        resolve(canvas.toDataURL('image/png'))
-      } catch (e) {
-        reject(e)
-      }
-    }
-    img.onerror = reject
-    img.src = url
-  })
-}
-
-/** 点击数字：填入下一个未填的伤害输入框 */
-function fillNextDamage(n) {
-  const slots = [
-    ...myPicks.value.map((s, i) => ({ slot: s, label: `我方选人${i + 1} 造成`, key: 'damageDealt' })),
-    ...myPicks.value.map((s, i) => ({ slot: s, label: `我方选人${i + 1} 承受`, key: 'damageTaken' })),
-    ...oppPicks.value.map((s, i) => ({ slot: s, label: `对方选人${i + 1} 造成`, key: 'damageDealt' })),
-    ...oppPicks.value.map((s, i) => ({ slot: s, label: `对方选人${i + 1} 承受`, key: 'damageTaken' })),
-  ]
-  const target = slots.find((s) => s.slot.heroId && (s.slot[s.key] === null || s.slot[s.key] === undefined || s.slot[s.key] === ''))
-  if (!target) {
-    toastStore.info('所有已选英雄的伤害已填满')
-    return
-  }
-  target.slot[target.key] = n
-  toastStore.info(`已填入：${target.label}`)
-}
-
-/** 自动按顺序填入所有伤害框 */
+/** 按截图的左右两列 + 五行位置，把“造成伤害”写回对应选人槽位。 */
 function autoFillDamage() {
-  const slots = [
-    ...myPicks.value.map((s) => s),
-    ...oppPicks.value.map((s) => s),
-  ]
-  let idx = 0
-  for (const s of slots) {
-    if (!s.heroId) continue
-    if (idx < ocrNumbers.value.length) s.damageDealt = ocrNumbers.value[idx++]
-    if (idx < ocrNumbers.value.length) s.damageTaken = ocrNumbers.value[idx++]
+  let filled = 0
+  let skippedNoHero = 0
+  let failed = 0
+  for (const r of ocrResults.value) {
+    if (r.damage === null) {
+      failed++
+      continue
+    }
+    const slots = r.side === 'me' ? myPicks.value : oppPicks.value
+    const slot = slots[r.index - 1]
+    if (!slot?.heroId) {
+      skippedNoHero++
+      continue
+    }
+    slot.damageDealt = r.damage
+    filled++
   }
-  toastStore.success(`已按顺序填入 ${Math.min(idx, ocrNumbers.value.length)} 个数字，请核对`)
+  if (filled) toastStore.success(`已按截图位置填入 ${filled} 个造成伤害${skippedNoHero ? `，${skippedNoHero} 个未选英雄已跳过` : ''}`)
+  else toastStore.warning('没有可填入的英雄：请先按截图顺序选择 5 名我方/对方英雄')
+  if (failed) toastStore.info(`${failed} 个区域识别失败，请手动填写`) 
+}
+
+function clearOcrDamage() {
+  ocrResults.value = []
 }
 
 const profile = computed(() => authStore.profile)
