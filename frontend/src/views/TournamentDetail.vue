@@ -247,14 +247,7 @@
 
               <div v-if="isMyMatch(m)" class="flex items-center gap-2">
                 <select v-model="reportForms[m.id].score" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none">
-                  <option value="2:0">2:0</option>
-                  <option value="2:1">2:1</option>
-                  <option value="0:2">0:2</option>
-                  <option value="1:2">1:2</option>
-                  <option value="3:0">3:0</option>
-                  <option value="3:1">3:1</option>
-                  <option value="3:2">3:2</option>
-                  <option value="2:3">2:3</option>
+                  <option v-for="s in getScoreOptions(matchBo(m))" :key="s" :value="s">{{ s }}</option>
                 </select>
                 <select v-model="reportForms[m.id].winnerId" class="px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-sm text-white focus:outline-none">
                   <option :value="m.player1_id">{{ m.player1_username }} 胜</option>
@@ -419,6 +412,23 @@ function formatDateTime(d) {
   return `${dt.toLocaleDateString('zh-CN')} ${dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
 }
 
+/** 根据 Bo 值返回可用比分选项 */
+function getScoreOptions(bo) {
+  const n = parseInt(bo) || 3
+  const winsNeeded = Math.ceil(n / 2)
+  const options = []
+  for (let loser = 0; loser < winsNeeded; loser++) {
+    options.push(winsNeeded + ':' + loser)
+    options.push(loser + ':' + winsNeeded)
+  }
+  return options
+}
+
+/** 获取对局的 Bo 值 */
+function matchBo(m) {
+  return m.bo || roundBo(m.round_number) || 3
+}
+
 const matchesByRound = computed(() => {
   const rounds = {}
   for (const m of matches.value) {
@@ -472,7 +482,12 @@ async function handleSetRoundBo(round, bo) {
   try {
     const res = await tournamentApi.setRoundBo(tournamentId.value, round, bo)
     toastStore.success(res.data.message)
-    await load()
+    // 直接更新本地数据，避免 load() 重置页面状态
+    if (tournament.value) {
+      if (!tournament.value.settings) tournament.value.settings = {}
+      if (!tournament.value.settings.roundsBo) tournament.value.settings.roundsBo = {}
+      tournament.value.settings.roundsBo[round] = parseInt(bo)
+    }
   } catch (err) {
     toastStore.error(err.response?.data?.error || '设置失败')
   }
@@ -549,7 +564,9 @@ async function load() {
     matches.value = res.data.matches
     for (const m of matches.value) {
       if (!reportForms.value[m.id]) {
-        reportForms.value[m.id] = { score: '2:0', winnerId: m.player1_id }
+        const bo = matchBo(m)
+        const defaultScore = bo == 1 ? '1:0' : (bo == 5 ? '3:0' : '2:0')
+        reportForms.value[m.id] = { score: defaultScore, winnerId: m.player1_id }
       }
     }
   } catch (err) {
