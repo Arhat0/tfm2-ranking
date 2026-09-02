@@ -65,14 +65,14 @@
           <thead>
             <tr class="bg-dark-900/60 text-dark-400 text-left">
               <th class="px-4 py-3 font-medium">#</th>
-              <th class="px-4 py-3 font-medium">英雄</th>
-              <th class="px-4 py-3 font-medium">定位</th>
-              <th class="px-4 py-3 font-medium text-center">Pick 次数</th>
-              <th class="px-4 py-3 font-medium text-center">Ban 次数</th>
-              <th class="px-4 py-3 font-medium text-center">Pick 胜率</th>
-              <th class="px-4 py-3 font-medium text-center">场均造成伤害</th>
-              <th class="px-4 py-3 font-medium text-center">场均承受伤害</th>
-              <th class="px-4 py-3 font-medium text-center">总造成伤害</th>
+              <th class="px-4 py-3 font-medium cursor-pointer hover:text-white select-none" @click="toggleSort('nameZh')">英雄{{ sortArrow('nameZh') }}</th>
+              <th class="px-4 py-3 font-medium cursor-pointer hover:text-white select-none" @click="toggleSort('category')">定位{{ sortArrow('category') }}</th>
+              <th class="px-4 py-3 font-medium text-center cursor-pointer hover:text-white select-none" @click="toggleSort('pickCount')">Pick 次数{{ sortArrow('pickCount') }}</th>
+              <th class="px-4 py-3 font-medium text-center cursor-pointer hover:text-white select-none" @click="toggleSort('banCount')">Ban 次数{{ sortArrow('banCount') }}</th>
+              <th class="px-4 py-3 font-medium text-center cursor-pointer hover:text-white select-none" @click="toggleSort('winRate')">Pick 胜率{{ sortArrow('winRate') }}</th>
+              <th class="px-4 py-3 font-medium text-center cursor-pointer hover:text-white select-none" @click="toggleSort('avgDamageDealt')">场均造成伤害{{ sortArrow('avgDamageDealt') }}</th>
+              <th class="px-4 py-3 font-medium text-center cursor-pointer hover:text-white select-none" @click="toggleSort('avgDamageTaken')">场均承受伤害{{ sortArrow('avgDamageTaken') }}</th>
+              <th class="px-4 py-3 font-medium text-center cursor-pointer hover:text-white select-none" @click="toggleSort('totalDamageDealt')">总造成伤害{{ sortArrow('totalDamageDealt') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -272,6 +272,8 @@ const summary = ref(null)
 const loading = ref(false)
 const selectedHero = ref(null)
 const heroLevel = ref(1)
+const sortBy = ref('pickCount')
+const sortDirection = ref('desc')
 
 const categoryMap = {
   Melee: '近战',
@@ -308,14 +310,41 @@ function formatNumber(n) {
 }
 
 const filteredStats = computed(() => {
-  if (!search.value) return stats.value
-  const q = search.value.toLowerCase()
-  return stats.value.filter(
-    (h) =>
-      (h.nameZh || '').toLowerCase().includes(q) ||
-      (h.nameEn || '').toLowerCase().includes(q)
-  )
+  let result = stats.value
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    result = result.filter(
+      (h) =>
+        (h.nameZh || '').toLowerCase().includes(q) ||
+        (h.nameEn || '').toLowerCase().includes(q)
+    )
+  }
+  const key = sortBy.value
+  const dir = sortDirection.value === 'asc' ? 1 : -1
+  result = [...result].sort((a, b) => {
+    let va = a[key] ?? 0
+    let vb = b[key] ?? 0
+    if (typeof va === 'string') {
+      return dir * va.localeCompare(vb, 'zh-CN')
+    }
+    return dir * (va - vb)
+  })
+  return result
 })
+
+function toggleSort(key) {
+  if (sortBy.value === key) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = key
+    sortDirection.value = 'desc'
+  }
+}
+
+function sortArrow(key) {
+  if (sortBy.value !== key) return ''
+  return sortDirection.value === 'asc' ? ' ↑' : ' ↓'
+}
 
 const heroDetails = computed(() => {
   if (!selectedHero.value) return {}
