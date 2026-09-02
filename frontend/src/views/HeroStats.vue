@@ -129,45 +129,66 @@
             <span v-for="tag in heroDetails.tags.split(',')" :key="tag" class="px-2 py-0.5 bg-dark-700 text-dark-300 rounded-full text-xs">{{ tag }}</span>
           </div>
 
-          <!-- 基础属性 -->
+          <!-- 等级滑块 -->
+          <div class="mb-6 bg-dark-900/40 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-semibold text-primary-400">等级预览</span>
+              <span class="text-lg font-bold text-white">{{ heroLevel }} 级</span>
+            </div>
+            <input
+              v-model.number="heroLevel"
+              type="range"
+              min="1"
+              max="12"
+              step="1"
+              class="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+            />
+            <div class="flex justify-between text-[10px] text-dark-500 mt-1">
+              <span>1级</span>
+              <span>6级</span>
+              <span>12级</span>
+            </div>
+          </div>
+
+          <!-- 属性（随等级变化） -->
           <div class="mb-6">
-            <h3 class="text-sm font-semibold text-primary-400 mb-3">基础属性</h3>
+            <h3 class="text-sm font-semibold text-primary-400 mb-3">{{ heroLevel }} 级属性</h3>
             <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">攻击力</div>
-                <div class="text-lg font-bold text-orange-400">{{ heroDetails.baseStats?.attack || 0 }}</div>
+                <div class="text-lg font-bold text-orange-400">{{ levelStats.attack }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">法术强度</div>
-                <div class="text-lg font-bold text-blue-400">{{ heroDetails.baseStats?.ap || 0 }}</div>
+                <div class="text-lg font-bold text-blue-400">{{ levelStats.ap }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">生命值</div>
-                <div class="text-lg font-bold text-green-400">{{ heroDetails.baseStats?.hp || 0 }}</div>
+                <div class="text-lg font-bold text-green-400">{{ levelStats.hp }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">防御力</div>
-                <div class="text-lg font-bold text-yellow-400">{{ heroDetails.baseStats?.defence || 0 }}</div>
+                <div class="text-lg font-bold text-yellow-400">{{ levelStats.defence }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">魔法抗性</div>
-                <div class="text-lg font-bold text-purple-400">{{ heroDetails.baseStats?.mr || 0 }}</div>
+                <div class="text-lg font-bold text-purple-400">{{ levelStats.mr }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">移动速度</div>
-                <div class="text-lg font-bold text-cyan-400">{{ heroDetails.baseStats?.moveSpeed || 0 }}</div>
+                <div class="text-lg font-bold text-cyan-400">{{ levelStats.moveSpeed }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">生命回复</div>
-                <div class="text-lg font-bold text-green-300">{{ heroDetails.baseStats?.hpRegen || 0 }}</div>
+                <div class="text-lg font-bold text-green-300">{{ levelStats.hpRegen }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">层数</div>
-                <div class="text-lg font-bold text-white">{{ heroDetails.baseStats?.stack || 0 }}</div>
+                <div class="text-lg font-bold text-white">{{ levelStats.stack }}</div>
               </div>
               <div class="bg-dark-900/60 rounded-lg p-3 text-center">
                 <div class="text-xs text-dark-500 mb-1">暴击率</div>
-                <div class="text-lg font-bold text-red-400">{{ heroDetails.baseStats?.critChance || 0 }}%</div>
+                <div class="text-lg font-bold text-red-400">{{ levelStats.critChance }}%</div>
               </div>
             </div>
           </div>
@@ -250,6 +271,7 @@ const heroes = ref([])
 const summary = ref(null)
 const loading = ref(false)
 const selectedHero = ref(null)
+const heroLevel = ref(1)
 
 const categoryMap = {
   Melee: '近战',
@@ -301,8 +323,27 @@ const heroDetails = computed(() => {
   return hero?.details || {}
 })
 
+const levelStats = computed(() => {
+  const base = heroDetails.value.baseStats || {}
+  const growth = heroDetails.value.growthStats || {}
+  const lv = heroLevel.value
+  const mult = lv - 1
+  return {
+    attack: Math.round((base.attack || 0) + (growth.attack || 0) * mult),
+    ap: Math.round((base.ap || 0) + (growth.ap || 0) * mult),
+    hp: Math.round((base.hp || 0) + (growth.hp || 0) * mult),
+    defence: Math.round((base.defence || 0) + (growth.defence || 0) * mult),
+    mr: Math.round((base.mr || 0) + (growth.mr || 0) * mult),
+    moveSpeed: Math.round((base.moveSpeed || 0) + (growth.moveSpeed || 0) * mult),
+    hpRegen: Math.round((base.hpRegen || 0) + (growth.hpRegen || 0) * mult),
+    stack: Math.round((base.stack || 0) + (growth.stack || 0) * mult),
+    critChance: Math.round((base.critChance || 0) + (growth.critChance || 0) * mult),
+  }
+})
+
 function showHeroDetail(h) {
   selectedHero.value = h
+  heroLevel.value = 1
 }
 
 async function loadHeroes() {
