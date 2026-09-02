@@ -1,5 +1,5 @@
 <template>
-  <div class="relative">
+  <div class="relative" ref="containerRef">
     <!-- 触发按钮 -->
     <button
       type="button"
@@ -10,7 +10,7 @@
       <span class="truncate" :class="selectedHero ? '' : 'text-dark-500'">
         {{ selectedHero ? (selectedHero.nameZh || selectedHero.nameEn) : placeholder }}
       </span>
-      <svg class="w-3 h-3 text-dark-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-3 h-3 text-dark-400 shrink-0 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
       </svg>
     </button>
@@ -18,15 +18,18 @@
     <!-- 弹出面板 -->
     <div
       v-if="open"
-      class="absolute z-50 mt-1 w-56 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl overflow-hidden"
+      class="absolute z-50 w-56 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl overflow-hidden"
+      :class="dropUp ? 'bottom-full mb-1' : 'top-full mt-1'"
     >
       <!-- 搜索框 -->
       <div class="p-2 border-b border-dark-700">
         <input
+          ref="searchInputRef"
           v-model="query"
           type="text"
           placeholder="搜索英雄名称..."
           class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-md text-xs text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+          @click.stop
         />
       </div>
 
@@ -35,7 +38,8 @@
         <button
           v-for="cat in categories"
           :key="cat.value"
-          @click="activeCategory = cat.value"
+          type="button"
+          @click.stop="activeCategory = cat.value"
           class="shrink-0 px-2 py-0.5 rounded-full text-[10px] transition-colors"
           :class="activeCategory === cat.value ? 'bg-primary-600 text-white' : 'bg-dark-700 text-dark-300 hover:text-white'"
         >
@@ -51,7 +55,8 @@
         <button
           v-for="h in filteredHeroes"
           :key="h.id"
-          @click="select(h)"
+          type="button"
+          @click.stop="select(h)"
           class="w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 hover:bg-primary-600/30 transition-colors"
           :class="h.id === modelValue ? 'bg-primary-600/20' : ''"
         >
@@ -60,7 +65,8 @@
         </button>
         <button
           v-if="heroes.length === 0 && !heroesLoading"
-          @click="$emit('retry')"
+          type="button"
+          @click.stop="$emit('retry')"
           class="w-full px-3 py-2 text-xs text-primary-400 hover:text-primary-300"
         >
           加载失败，点击重试
@@ -71,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Number, default: 0 },
@@ -82,9 +88,12 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'retry'])
 
+const containerRef = ref(null)
+const searchInputRef = ref(null)
 const open = ref(false)
 const query = ref('')
 const activeCategory = ref('all')
+const dropUp = ref(false)
 
 const categories = [
   { value: 'all', label: '全部' },
@@ -115,29 +124,58 @@ const filteredHeroes = computed(() => {
 })
 
 function toggle() {
-  open.value = !open.value
   if (open.value) {
-    query.value = ''
-    activeCategory.value = 'all'
+    close()
+  } else {
+    openDropdown()
   }
+}
+
+function openDropdown() {
+  // 计算是否需要向上展开
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const panelHeight = 280 // 估算面板高度
+    dropUp.value = spaceBelow < panelHeight && rect.top > panelHeight
+  }
+  open.value = true
+  query.value = ''
+  activeCategory.value = 'all'
+  nextTick(() => {
+    searchInputRef.value?.focus()
+  })
+}
+
+function close() {
+  open.value = false
 }
 
 function select(h) {
   emit('update:modelValue', h.id)
-  open.value = false
+  close()
 }
 
 // 点击外部关闭
+function handleClickOutside(e) {
+  if (containerRef.value && !containerRef.value.contains(e.target)) {
+    close()
+  }
+}
+
 watch(open, (val) => {
   if (val) {
-    setTimeout(() => document.addEventListener('click', closeOutside), 0)
+    document.addEventListener('click', handleClickOutside)
   } else {
-    document.removeEventListener('click', closeOutside)
+    document.removeEventListener('click', handleClickOutside)
   }
 })
 
-function closeOutside() {
-  open.value = false
-  document.removeEventListener('click', closeOutside)
-}
+onMounted(() => {
+  // 确保组件卸载时移除监听器
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
