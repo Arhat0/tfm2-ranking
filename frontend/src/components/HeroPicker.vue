@@ -1,9 +1,9 @@
 <template>
-  <div class="relative" ref="containerRef">
+  <div class="relative inline-block w-full" ref="triggerRef">
     <!-- 触发按钮 -->
     <button
       type="button"
-      @click.stop="toggle"
+      @click="toggle"
       class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs text-white text-left flex items-center justify-between gap-1 hover:border-primary-500 transition-colors"
       :class="{ 'border-primary-500': open }"
     >
@@ -15,11 +15,14 @@
       </svg>
     </button>
 
-    <!-- 弹出面板 -->
+    <!-- 遮罩层（点击关闭） -->
+    <div v-if="open" class="fixed inset-0 z-40" @click="close"></div>
+
+    <!-- 弹出面板（fixed 定位，脱离父元素 overflow 限制） -->
     <div
       v-if="open"
-      class="absolute z-50 w-56 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl overflow-hidden"
-      :class="dropUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+      class="fixed z-50 w-56 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl overflow-hidden"
+      :style="panelStyle"
     >
       <!-- 搜索框 -->
       <div class="p-2 border-b border-dark-700">
@@ -29,7 +32,6 @@
           type="text"
           placeholder="搜索英雄名称..."
           class="w-full px-2 py-1.5 bg-dark-900 border border-dark-600 rounded-md text-xs text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
-          @click.stop
         />
       </div>
 
@@ -39,7 +41,7 @@
           v-for="cat in categories"
           :key="cat.value"
           type="button"
-          @click.stop="activeCategory = cat.value"
+          @click="activeCategory = cat.value"
           class="shrink-0 px-2 py-0.5 rounded-full text-[10px] transition-colors"
           :class="activeCategory === cat.value ? 'bg-primary-600 text-white' : 'bg-dark-700 text-dark-300 hover:text-white'"
         >
@@ -56,7 +58,7 @@
           v-for="h in filteredHeroes"
           :key="h.id"
           type="button"
-          @click.stop="select(h)"
+          @click="select(h)"
           class="w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 hover:bg-primary-600/30 transition-colors"
           :class="h.id === modelValue ? 'bg-primary-600/20' : ''"
         >
@@ -66,7 +68,7 @@
         <button
           v-if="heroes.length === 0 && !heroesLoading"
           type="button"
-          @click.stop="$emit('retry')"
+          @click="$emit('retry')"
           class="w-full px-3 py-2 text-xs text-primary-400 hover:text-primary-300"
         >
           加载失败，点击重试
@@ -77,7 +79,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Number, default: 0 },
@@ -88,12 +90,12 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'retry'])
 
-const containerRef = ref(null)
+const triggerRef = ref(null)
 const searchInputRef = ref(null)
 const open = ref(false)
 const query = ref('')
 const activeCategory = ref('all')
-const dropUp = ref(false)
+const panelStyle = ref({})
 
 const categories = [
   { value: 'all', label: '全部' },
@@ -132,23 +134,21 @@ function toggle() {
 }
 
 function openDropdown() {
-  // 计算是否需要向上展开
-  if (containerRef.value) {
-    const rect = containerRef.value.getBoundingClientRect()
-    const spaceBelow = window.innerHeight - rect.bottom
-    const panelHeight = 280 // 估算面板高度
-    dropUp.value = spaceBelow < panelHeight && rect.top > panelHeight
-  }
   open.value = true
   query.value = ''
   activeCategory.value = 'all'
   nextTick(() => {
+    updatePanelPosition()
     searchInputRef.value?.focus()
   })
+  window.addEventListener('resize', updatePanelPosition)
+  window.addEventListener('scroll', updatePanelPosition, true)
 }
 
 function close() {
   open.value = false
+  window.removeEventListener('resize', updatePanelPosition)
+  window.removeEventListener('scroll', updatePanelPosition, true)
 }
 
 function select(h) {
@@ -156,26 +156,45 @@ function select(h) {
   close()
 }
 
-// 点击外部关闭
-function handleClickOutside(e) {
-  if (containerRef.value && !containerRef.value.contains(e.target)) {
-    close()
+function updatePanelPosition() {
+  if (!triggerRef.value) return
+  const rect = triggerRef.value.getBoundingClientRect()
+  const panelWidth = 224 // w-56 = 14rem = 224px
+  const panelHeight = 280 // 估算高度
+
+  let left = rect.left
+  // 防止超出右边界
+  if (left + panelWidth > window.innerWidth) {
+    left = window.innerWidth - panelWidth - 8
+  }
+  // 防止超出左边界
+  if (left < 8) left = 8
+
+  const spaceBelow = window.innerHeight - rect.bottom
+  const spaceAbove = rect.top
+
+  let top, bottom
+  if (spaceBelow < panelHeight && spaceAbove > spaceBelow) {
+    // 向上展开
+    bottom = window.innerHeight - rect.top + 4
+    top = 'auto'
+  } else {
+    // 向下展开
+    top = rect.bottom + 4
+    bottom = 'auto'
+  }
+
+  panelStyle.value = {
+    left: left + 'px',
+    top: top === 'auto' ? 'auto' : top + 'px',
+    bottom: bottom === 'auto' ? 'auto' : bottom + 'px',
   }
 }
 
-watch(open, (val) => {
-  if (val) {
-    document.addEventListener('click', handleClickOutside)
-  } else {
-    document.removeEventListener('click', handleClickOutside)
-  }
-})
-
-onMounted(() => {
-  // 确保组件卸载时移除监听器
-})
+onMounted(() => {})
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+  window.removeEventListener('resize', updatePanelPosition)
+  window.removeEventListener('scroll', updatePanelPosition, true)
 })
 </script>
