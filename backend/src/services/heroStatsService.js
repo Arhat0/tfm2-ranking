@@ -10,7 +10,7 @@ class HeroStatsService {
    */
   async getHeroes() {
     const result = await db.query(
-      'SELECT id, key, name_en, name_zh, category FROM heroes ORDER BY id'
+      'SELECT id, key, name_en, name_zh, category, details FROM heroes ORDER BY id'
     );
     // 统一输出驼峰字段（前端使用 nameZh/nameEn）
     return result.rows.map((r) => ({
@@ -19,6 +19,7 @@ class HeroStatsService {
       nameEn: r.name_en,
       nameZh: r.name_zh,
       category: r.category,
+      details: r.details || {},
     }));
   }
 

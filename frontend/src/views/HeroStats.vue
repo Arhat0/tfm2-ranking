@@ -3,7 +3,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-white">英雄 BP 统计</h1>
-        <p class="text-sm text-dark-400 mt-1">统计所有已完成对局中的英雄选择（Pick）/禁用（Ban）与伤害数据</p>
+        <p class="text-sm text-dark-400 mt-1">统计所有已完成对局中的英雄选择（Pick）/禁用（Ban）与伤害数据。点击英雄查看详细数值</p>
       </div>
 
       <div class="flex items-center gap-2">
@@ -79,7 +79,8 @@
             <tr
               v-for="(h, i) in filteredStats"
               :key="h.heroId"
-              class="border-t border-dark-700/60 hover:bg-dark-700/30 transition-colors"
+              class="border-t border-dark-700/60 hover:bg-dark-700/30 transition-colors cursor-pointer"
+              @click="showHeroDetail(h)"
             >
               <td class="px-4 py-3 text-dark-400">{{ i + 1 }}</td>
               <td class="px-4 py-3">
@@ -108,6 +109,131 @@
         </table>
       </div>
     </div>
+
+    <!-- 英雄详情弹窗 -->
+    <div v-if="selectedHero" class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="selectedHero = null">
+      <div class="absolute inset-0 bg-black/70" @click="selectedHero = null"></div>
+      <div class="relative bg-dark-800 rounded-2xl border border-dark-600 shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <!-- 头部 -->
+        <div class="sticky top-0 bg-dark-800 border-b border-dark-700 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white">{{ selectedHero.nameZh || selectedHero.nameEn }}</h2>
+            <p class="text-sm text-dark-400">{{ selectedHero.nameEn }} · {{ categoryName(selectedHero.category) }}</p>
+          </div>
+          <button @click="selectedHero = null" class="text-dark-400 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+
+        <div class="p-6">
+          <!-- 标签 -->
+          <div v-if="heroDetails.tags" class="flex flex-wrap gap-2 mb-6">
+            <span v-for="tag in heroDetails.tags.split(',')" :key="tag" class="px-2 py-0.5 bg-dark-700 text-dark-300 rounded-full text-xs">{{ tag }}</span>
+          </div>
+
+          <!-- 基础属性 -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-primary-400 mb-3">基础属性</h3>
+            <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">攻击力</div>
+                <div class="text-lg font-bold text-orange-400">{{ heroDetails.baseStats?.attack || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">法术强度</div>
+                <div class="text-lg font-bold text-blue-400">{{ heroDetails.baseStats?.ap || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">生命值</div>
+                <div class="text-lg font-bold text-green-400">{{ heroDetails.baseStats?.hp || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">防御力</div>
+                <div class="text-lg font-bold text-yellow-400">{{ heroDetails.baseStats?.defence || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">魔法抗性</div>
+                <div class="text-lg font-bold text-purple-400">{{ heroDetails.baseStats?.mr || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">移动速度</div>
+                <div class="text-lg font-bold text-cyan-400">{{ heroDetails.baseStats?.moveSpeed || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">生命回复</div>
+                <div class="text-lg font-bold text-green-300">{{ heroDetails.baseStats?.hpRegen || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">层数</div>
+                <div class="text-lg font-bold text-white">{{ heroDetails.baseStats?.stack || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/60 rounded-lg p-3 text-center">
+                <div class="text-xs text-dark-500 mb-1">暴击率</div>
+                <div class="text-lg font-bold text-red-400">{{ heroDetails.baseStats?.critChance || 0 }}%</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 成长属性 -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-primary-400 mb-3">每级成长</h3>
+            <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">攻击力</div>
+                <div class="text-sm font-semibold text-orange-300">+{{ heroDetails.growthStats?.attack || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">法术强度</div>
+                <div class="text-sm font-semibold text-blue-300">+{{ heroDetails.growthStats?.ap || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">生命值</div>
+                <div class="text-sm font-semibold text-green-300">+{{ heroDetails.growthStats?.hp || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">防御力</div>
+                <div class="text-sm font-semibold text-yellow-300">+{{ heroDetails.growthStats?.defence || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">魔法抗性</div>
+                <div class="text-sm font-semibold text-purple-300">+{{ heroDetails.growthStats?.mr || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">移动速度</div>
+                <div class="text-sm font-semibold text-cyan-300">+{{ heroDetails.growthStats?.moveSpeed || 0 }}</div>
+              </div>
+              <div class="bg-dark-900/40 rounded-lg p-2 text-center">
+                <div class="text-[10px] text-dark-500 mb-0.5">生命回复</div>
+                <div class="text-sm font-semibold text-green-200">+{{ heroDetails.growthStats?.hpRegen || 0 }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 技能列表 -->
+          <div>
+            <h3 class="text-sm font-semibold text-primary-400 mb-3">技能</h3>
+            <div class="space-y-3">
+              <div v-for="skill in heroDetails.skills" :key="skill.slot" class="bg-dark-900/60 rounded-lg p-4 border border-dark-700">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 bg-primary-600/30 text-primary-300 rounded text-xs font-medium">{{ skill.slot }}</span>
+                    <span class="font-semibold text-white">{{ skill.nameZh }}</span>
+                    <span class="text-xs text-dark-500">{{ skill.nameEn }}</span>
+                  </div>
+                </div>
+                <p class="text-xs text-dark-300 mb-2">{{ skill.descZh }}</p>
+                <div v-if="skill.stats" class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-dark-400">
+                  <span v-if="skill.stats.baseDamage">基础伤害: <span class="text-orange-300">{{ skill.stats.baseDamage }}</span></span>
+                  <span v-if="skill.stats.attackRatio">攻击系数: <span class="text-orange-300">{{ skill.stats.attackRatio }}%</span></span>
+                  <span v-if="skill.stats.apRatio">法术系数: <span class="text-blue-300">{{ skill.stats.apRatio }}%</span></span>
+                  <span v-if="skill.stats.range">射程: <span class="text-cyan-300">{{ skill.stats.range }}</span></span>
+                  <span v-if="skill.stats.cooldown">冷却: <span class="text-yellow-300">{{ skill.stats.cooldown }}</span></span>
+                  <span v-if="skill.stats.duration">持续: <span class="text-green-300">{{ skill.stats.duration }}</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -120,8 +246,10 @@ const toastStore = useToastStore()
 const mode = ref('global')
 const search = ref('')
 const stats = ref([])
+const heroes = ref([])
 const summary = ref(null)
 const loading = ref(false)
+const selectedHero = ref(null)
 
 const categoryMap = {
   Melee: '近战',
@@ -167,6 +295,25 @@ const filteredStats = computed(() => {
   )
 })
 
+const heroDetails = computed(() => {
+  if (!selectedHero.value) return {}
+  const hero = heroes.value.find((h) => h.id === selectedHero.value.heroId)
+  return hero?.details || {}
+})
+
+function showHeroDetail(h) {
+  selectedHero.value = h
+}
+
+async function loadHeroes() {
+  try {
+    const res = await heroStatsApi.list()
+    heroes.value = res.data.heroes
+  } catch (err) {
+    console.error('Load heroes error:', err)
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -187,5 +334,8 @@ async function loadData() {
 
 watch(mode, loadData)
 
-onMounted(loadData)
+onMounted(() => {
+  loadHeroes()
+  loadData()
+})
 </script>
