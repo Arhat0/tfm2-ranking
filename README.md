@@ -321,7 +321,44 @@ tfm2-ranking/
 - **管理员改判**：争议时管理员可确认上报、取消对局或改判胜者
 - **不能删除自己**：管理员无法删除自己的账号
 
-## 部署
+## 在线部署
+
+本项目已部署到以下平台，可直接访问使用：
+
+### 🌐 前端（Vue 应用）
+
+| 平台 | URL |
+|------|-----|
+| Netlify | https://venerable-macaron-b97800.netlify.app |
+| 腾讯云 EdgeOne | https://tfm2-ranking-dp1nchx9i46l.edgeone.cool |
+
+前端环境变量：
+- `VITE_API_URL=https://tfm2-ranking-production.up.railway.app/api`
+
+### 🚀 后端（Node.js + Express + Socket.io）
+
+| 平台 | 说明 |
+|------|------|
+| Railway | 运行 API 服务与 WebSocket 实时通信 |
+
+后端环境变量：
+- `DATABASE_URL`：连接 Neon PostgreSQL（包含主机、用户名、密码、数据库名，启用 SSL）
+- `JWT_SECRET`：JWT 签名密钥
+- `PORT`：服务端口（由平台自动注入）
+
+### 🗄️ 数据库（PostgreSQL）
+
+| 平台 | 说明 |
+|------|------|
+| Neon | 云端 PostgreSQL，通过后端 `DATABASE_URL` 环境变量连接 |
+
+### ⏰ 定期唤醒
+
+| 平台 | 说明 |
+|------|------|
+| UptimeRobot | 定时访问后端健康检查端点，防止免费层服务休眠 |
+
+## 本地部署
 
 支持多种部署方式，详见 `DEPLOY.md`：
 
