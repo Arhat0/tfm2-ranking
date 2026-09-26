@@ -295,23 +295,23 @@ tfm2-ranking/
 
 ## WebSocket 事件
 
-| 事件            | 方向 | 说明                             |
-| --------------- | ---- | -------------------------------- |
-| match:search    | C→S | 开始匹配                         |
-| match:cancel    | C→S | 取消匹配                         |
-| match:found     | S→C | 匹配成功（含对手信息、房间标题） |
-| match:start     | S→C | 对局开始                         |
-| match:report    | C→S | 上报结果                         |
-| match:confirm   | C→S | 确认/争议                        |
-| match:result    | S→C | 结算通知（含积分变化）           |
-| match:cancelled | S→C | 对局取消                         |
-| tournament:join | C→S | 订阅赛事实时更新                 |
-| tournament:leave | C→S | 取消订阅赛事                     |
-| tournament:updated | S→C | 赛事状态变更                   |
-| tournament:started | S→C | 赛事开赛                       |
-| tournament:round_started | S→C | 新一轮开始                 |
-| tournament:match_updated | S→C | 对局结果更新                 |
-| tournament:completed | S→C | 赛事结束                       |
+| 事件                     | 方向 | 说明                             |
+| ------------------------ | ---- | -------------------------------- |
+| match:search             | C→S | 开始匹配                         |
+| match:cancel             | C→S | 取消匹配                         |
+| match:found              | S→C | 匹配成功（含对手信息、房间标题） |
+| match:start              | S→C | 对局开始                         |
+| match:report             | C→S | 上报结果                         |
+| match:confirm            | C→S | 确认/争议                        |
+| match:result             | S→C | 结算通知（含积分变化）           |
+| match:cancelled          | S→C | 对局取消                         |
+| tournament:join          | C→S | 订阅赛事实时更新                 |
+| tournament:leave         | C→S | 取消订阅赛事                     |
+| tournament:updated       | S→C | 赛事状态变更                     |
+| tournament:started       | S→C | 赛事开赛                         |
+| tournament:round_started | S→C | 新一轮开始                       |
+| tournament:match_updated | S→C | 对局结果更新                     |
+| tournament:completed     | S→C | 赛事结束                         |
 
 ## 防作弊策略
 
@@ -327,35 +327,37 @@ tfm2-ranking/
 
 ### 🌐 前端（Vue 应用）
 
-| 平台 | URL |
-|------|-----|
-| Netlify | https://venerable-macaron-b97800.netlify.app |
+| 平台           | URL                                            |
+| -------------- | ---------------------------------------------- |
+| Netlify        | https://venerable-macaron-b97800.netlify.app   |
 | 腾讯云 EdgeOne | https://tfm2-ranking-dp1nchx9i46l.edgeone.cool |
 
 前端环境变量：
+
 - `VITE_API_URL=https://tfm2-ranking-production.up.railway.app/api`
 
 ### 🚀 后端（Node.js + Express + Socket.io）
 
-| 平台 | 说明 |
-|------|------|
+| 平台    | 说明                               |
+| ------- | ---------------------------------- |
 | Railway | 运行 API 服务与 WebSocket 实时通信 |
 
 后端环境变量：
+
 - `DATABASE_URL`：连接 Neon PostgreSQL（包含主机、用户名、密码、数据库名，启用 SSL）
 - `JWT_SECRET`：JWT 签名密钥
 - `PORT`：服务端口（由平台自动注入）
 
 ### 🗄️ 数据库（PostgreSQL）
 
-| 平台 | 说明 |
-|------|------|
+| 平台 | 说明                                                    |
+| ---- | ------------------------------------------------------- |
 | Neon | 云端 PostgreSQL，通过后端 `DATABASE_URL` 环境变量连接 |
 
 ### ⏰ 定期唤醒
 
-| 平台 | 说明 |
-|------|------|
+| 平台        | 说明                                         |
+| ----------- | -------------------------------------------- |
 | UptimeRobot | 定时访问后端健康检查端点，防止免费层服务休眠 |
 
 ## 本地部署
@@ -368,4 +370,4 @@ tfm2-ranking/
 
 ## License
 
-MIT
+MIT 1
